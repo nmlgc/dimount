@@ -72,7 +72,7 @@ static int DOKAN_CALLBACK DIMGetVolumeInformation(
 	wcscpy_s(VolumeNameBuffer, VolumeNameSize / sizeof(WCHAR), fs->Label);
 	*VolumeSerialNumber = fs->Serial;
 	*MaximumComponentLength = fs->FSFormat->FNLength;
-	wcscpy_s(FileSystemNameBuffer, FileSystemNameSize / sizeof(WCHAR), fs->FSFormat->Name);
+	wcscpy_s(FileSystemNameBuffer, FileSystemNameSize / sizeof(WCHAR), fs->FSFormat->Name(fs));
 	return 1;
 }
 
@@ -168,7 +168,7 @@ int dimount(const wchar_t *Mountpoint, const wchar_t *ImageFN)
 	if(fs_to_mount) {
 		fwprintf(stdout,
 			L"Mounting partition #%d. File system format: %s\n",
-			i, fs_to_mount->FSFormat->Name
+			i, fs_to_mount->FSFormat->Name(fs_to_mount)
 		);
 	} else {
 		fwprintf(stderr, L"Found no supported file system on any partition.\n");

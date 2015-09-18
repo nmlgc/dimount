@@ -19,8 +19,9 @@ typedef struct CONTAINER CONTAINER;
 typedef struct FILESYSTEM FILESYSTEM;
 
 typedef struct FSFORMAT {
-	// User-friendly name of the format.
-	const wchar_t *Name;
+	// Returns a user-friendly name of the format of [FS].
+	// Should also be implemented for FS == NULL.
+	const wchar_t* (*Name)(FILESYSTEM *FS);
 	// Maximum filename length.
 	const UINT FNLength;
 	// Returns 0 if [FS] was successfully identified as a
@@ -30,9 +31,9 @@ typedef struct FSFORMAT {
 	void(*DiskSizes)(FILESYSTEM *FS, uint64_t *Total, uint64_t *Available);
 } FSFORMAT;
 
-#define NEW_FSFORMAT(ID, _Name, _FNLength) \
+#define NEW_FSFORMAT(ID, _FNLength) \
 	const FSFORMAT FS_##ID = { \
-		.Name = _Name, \
+		.Name = FS_##ID##_Name, \
 		.FNLength = _FNLength, \
 		.Probe = FS_##ID##_Probe, \
 		.DiskSizes = FS_##ID##_DiskSizes \

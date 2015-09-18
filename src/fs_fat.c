@@ -36,6 +36,11 @@ static int FAT_ValidMedia(uint8_t media)
 	return 0xf8 <= media || media == 0xf0;
 }
 
+const wchar_t* FS_FAT_Name(FILESYSTEM *FS)
+{
+	return L"FAT";
+}
+
 int FS_FAT_Probe(FILESYSTEM *FS)
 {
 	FBR_GET;
@@ -65,4 +70,4 @@ void FS_FAT_DiskSizes(FILESYSTEM *FS, uint64_t *Total, uint64_t *Available)
 	*Available = 0;
 }
 
-NEW_FSFORMAT(FAT, L"FAT", 12);
+NEW_FSFORMAT(FAT, 12);
