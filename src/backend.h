@@ -86,6 +86,9 @@ const CFORMAT* ImageCFormatProbe(CONTAINER *Image);
 typedef struct FILESYSTEM {
 	CONTAINER *Image; // CONTAINER that contains this file system
 	const FSFORMAT *FSFormat;
+	// Custom filesystem-specific data, allocated using HeapAlloc()
+	void *FSData;
+
 	UINT SectorSize;
 	UINT CodePage;
 	uint64_t Start;

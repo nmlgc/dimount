@@ -25,8 +25,16 @@ typedef struct {
 } FAT_BOOT_RECORD;
 #pragma pack(pop)
 
+// Some precalculated filesystem constants
+typedef struct {
+	uint32_t Sectors;
+	uint32_t DataSectors;
+} FAT_INFO;
+
 #define FBR_GET \
 	const FAT_BOOT_RECORD *fbr = FSStructAt(FAT_BOOT_RECORD, FS, 0);
+#define FAT_INFO_GET \
+	const FAT_INFO *fat_info = FS->FSData;
 #define FBR_GET_ASSERT \
 	FBR_GET; \
 	assert(fbr);
@@ -52,21 +60,28 @@ int FS_FAT_Probe(FILESYSTEM *FS)
 	}
 	FS->SectorSize = fbr->SecSize;
 	uint32_t sectors = fbr->Sectors16 ? fbr->Sectors16 : fbr->Sectors32;
+	uint32_t root_dir_sector = fbr->SecsReserved + (fbr->FATLength * fbr->FATs);
 	uint32_t size = sectors * FS->SectorSize;
 	if(!FSAt(FS, size, 0) || !FAT_ValidMedia(fbr->Media)) {
 		return 1;
 	}
 	FS->End = FS->Start + size;
 	FS->Serial = fbr->Serial;
+
+	FS->FSData = HeapAlloc(GetProcessHeap(), 0, sizeof(FAT_INFO));
+	if(!FS->FSData) {
+		return ERROR_OUTOFMEMORY;
+	}
+	FAT_INFO *fat_info = FS->FSData;
+	fat_info->Sectors = sectors;
+	fat_info->DataSectors = sectors - root_dir_sector;
 	return 0;
 }
 
 void FS_FAT_DiskSizes(FILESYSTEM *FS, uint64_t *Total, uint64_t *Available)
 {
-	FBR_GET_ASSERT;
-	uint64_t sectors = fbr->Sectors16 ? fbr->Sectors16 : fbr->Sectors32;
-	sectors -= (fbr->FATLength * fbr->FATs) - fbr->SecsReserved;
-	*Total = sectors * FS->SectorSize;
+	FAT_INFO_GET;
+	*Total = fat_info->DataSectors * FS->SectorSize;
 	*Available = 0;
 }
 
