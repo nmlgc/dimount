@@ -35,7 +35,8 @@ int ReportError(int ReturnValue, DWORD Error, const wchar_t *Prefix, ...)
 #define PrintEnter fprintf(stderr, __FUNCTION__);
 #define PrintEnterln fprintf(stderr, "%s\n", __FUNCTION__);
 #define DIMCallbackEnter \
-	FILESYSTEM *fs = (FILESYSTEM*)DokanFileInfo->DokanOptions->GlobalContext;
+	FILESYSTEM *fs = (FILESYSTEM*)DokanFileInfo->DokanOptions->GlobalContext; \
+	const FSFORMAT *fmt = fs->FSFormat;
 
 static int DOKAN_CALLBACK DIMGetDiskFreeSpace(
 	PULONGLONG FreeBytesAvailable,
@@ -48,7 +49,7 @@ static int DOKAN_CALLBACK DIMGetDiskFreeSpace(
 #ifdef _DEBUG
 	PrintEnterln;
 #endif
-	fs->FSFormat->DiskSizes(fs, TotalNumberOfBytes, TotalNumberOfFreeBytes);
+	fmt->DiskSizes(fs, TotalNumberOfBytes, TotalNumberOfFreeBytes);
 	*FreeBytesAvailable = *TotalNumberOfFreeBytes;
 	return 0;
 }
@@ -71,8 +72,8 @@ static int DOKAN_CALLBACK DIMGetVolumeInformation(
 	UNREFERENCED_PARAMETER(DokanFileInfo);
 	wcscpy_s(VolumeNameBuffer, VolumeNameSize / sizeof(WCHAR), fs->Label);
 	*VolumeSerialNumber = fs->Serial;
-	*MaximumComponentLength = fs->FSFormat->FNLength;
-	wcscpy_s(FileSystemNameBuffer, FileSystemNameSize / sizeof(WCHAR), fs->FSFormat->Name(fs));
+	*MaximumComponentLength = fmt->FNLength;
+	wcscpy_s(FileSystemNameBuffer, FileSystemNameSize / sizeof(WCHAR), fmt->Name(fs));
 	return 1;
 }
 
