@@ -23,10 +23,27 @@ typedef struct {
 	uint8_t OSData[3]; // ???
 	uint32_t Serial; // serial number
 } FAT_BOOT_RECORD;
+
+typedef struct {
+	// Both BaseName and Extension are padded out with spaces. The first
+	// character of FileName can be the following:
+	// * 0x00: unused file
+	// * 0x05: first character is actually 0xE5
+	// * 0xE5: previously deleted file
+	char BaseName[8];
+	char Extension[3];
+	uint8_t Attribute;
+	uint8_t Reserved[10];
+	uint16_t Time;
+	uint16_t Date;
+	uint16_t FirstCluster;
+	uint32_t Size;
+} FAT_DIR_ENTRY;
 #pragma pack(pop)
 
 // Some precalculated filesystem constants
 typedef struct {
+	FAT_DIR_ENTRY *RootDir;
 	uint32_t Sectors;
 	uint32_t DataSectors;
 } FAT_INFO;
@@ -42,6 +59,21 @@ typedef struct {
 static int FAT_ValidMedia(uint8_t media)
 {
 	return 0xf8 <= media || media == 0xf0;
+}
+
+static size_t FAT_NameComponentCopy(char *dst, const char *src, size_t len)
+{
+	assert(dst);
+	assert(src);
+	int e = (int)(len) - 1;
+	// Apparently, spaces are technically allowed in filenames, so we just
+	// remove trailing ones.
+	while(e >= 0 && src[e--] == ' ') {
+		len--;
+	}
+	memcpy(dst, src, len);
+	dst[len] = '\0';
+	return len;
 }
 
 const wchar_t* FS_FAT_Name(FILESYSTEM *FS)
@@ -73,6 +105,9 @@ int FS_FAT_Probe(FILESYSTEM *FS)
 		return ERROR_OUTOFMEMORY;
 	}
 	FAT_INFO *fat_info = FS->FSData;
+	fat_info->RootDir = FSStructAt(
+		FAT_DIR_ENTRY, FS, root_dir_sector * FS->SectorSize
+	);
 	fat_info->Sectors = sectors;
 	fat_info->DataSectors = sectors - root_dir_sector;
 	return 0;
@@ -87,7 +122,43 @@ void FS_FAT_DiskSizes(FILESYSTEM *FS, uint64_t *Total, uint64_t *Available)
 
 int FS_FAT_FindFilesA(FILESYSTEM *FS, const char* DirName, uint64_t *State, WIN32_FIND_DATAA *FD)
 {
-	return 0;
+	// Only root directory for now
+	if(strcmp(DirName, "\\")) {
+		return 0;
+	}
+	FBR_GET_ASSERT;
+	FAT_INFO_GET;
+	FAT_DIR_ENTRY *dentry = fat_info->RootDir + *State;
+	if(!dentry) {
+		return -1;
+	}
+	unsigned char first = dentry->BaseName[0];
+	if(first == 0x00) {
+		return 0;
+	} else if(first != 0xE5 && (dentry->Attribute & 0x08) == 0) {
+		char ext[sizeof(dentry->Extension) + 1] = {0};
+		FAT_NameComponentCopy(ext, dentry->Extension, sizeof(dentry->Extension));
+		size_t name_len = FAT_NameComponentCopy(
+			FD->cFileName, dentry->BaseName, sizeof(dentry->BaseName)
+		);
+		if(first == 0x05) {
+			FD->cFileName[0] = 0xE5;
+		}
+		if(ext[0] != '\0') {
+			FD->cFileName[name_len++] = '.';
+			memcpy(&FD->cFileName[name_len], ext, sizeof(ext));
+		}
+		FILETIME timestamp;
+		DosDateTimeToFileTime(dentry->Date, dentry->Time, &timestamp);
+		FD->nFileSizeHigh = 0;
+		FD->nFileSizeLow = dentry->Size;
+		FD->ftCreationTime = timestamp;
+		FD->ftLastAccessTime = timestamp;
+		FD->ftLastWriteTime = timestamp;
+		FD->dwFileAttributes = dentry->Attribute;
+	}
+	(*State)++;
+	return *State < fbr->RootDirEntries;
 }
 
 NEW_FSFORMAT(FAT, 12, A);
