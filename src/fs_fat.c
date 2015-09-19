@@ -85,4 +85,9 @@ void FS_FAT_DiskSizes(FILESYSTEM *FS, uint64_t *Total, uint64_t *Available)
 	*Available = 0;
 }
 
-NEW_FSFORMAT(FAT, 12);
+int FS_FAT_FindFilesA(FILESYSTEM *FS, const char* DirName, uint64_t *State, WIN32_FIND_DATAA *FD)
+{
+	return 0;
+}
+
+NEW_FSFORMAT(FAT, 12, A);

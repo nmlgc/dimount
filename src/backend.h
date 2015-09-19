@@ -18,6 +18,9 @@ typedef struct {
 typedef struct CONTAINER CONTAINER;
 typedef struct FILESYSTEM FILESYSTEM;
 
+// All callbacks that handle file names come in both A and W functions.
+// Depending on whether the file system stores its filenames in UTF-16 (W) or
+// a different encoding (A), only one of those needs to be implemented.
 typedef struct FSFORMAT {
 	// Returns a user-friendly name of the format of [FS].
 	// Should also be implemented for FS == NULL.
@@ -29,14 +32,22 @@ typedef struct FSFORMAT {
 	int(*Probe)(FILESYSTEM *FS);
 	// Returns [Total] and [Available] number of bytes on the file system.
 	void(*DiskSizes)(FILESYSTEM *FS, uint64_t *Total, uint64_t *Available);
+	// Fills [FD] with the next file in [DirName]. The implementation can
+	// use [State] to keep track of the current index within the directory.
+	// Returns 1 as long as there are files left, 0 otherwise.
+	int(*FindFilesA)(FILESYSTEM *FS, const char* DirName, uint64_t *State, WIN32_FIND_DATAA *FD);
+	int(*FindFilesW)(FILESYSTEM *FS, const wchar_t* DirName, uint64_t *State, WIN32_FIND_DATAW *FD);
 } FSFORMAT;
 
-#define NEW_FSFORMAT(ID, _FNLength) \
+typedef int FindFiles_t(FILESYSTEM *FS, const void* DirName, uint64_t *State, void *FD);
+
+#define NEW_FSFORMAT(ID, _FNLength, CharSet) \
 	const FSFORMAT FS_##ID = { \
 		.Name = FS_##ID##_Name, \
 		.FNLength = _FNLength, \
 		.Probe = FS_##ID##_Probe, \
-		.DiskSizes = FS_##ID##_DiskSizes \
+		.DiskSizes = FS_##ID##_DiskSizes, \
+		.FindFiles##CharSet = FS_##ID##_FindFiles##CharSet, \
 	}
 
 typedef struct PTFORMAT {
