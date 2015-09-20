@@ -108,6 +108,12 @@ typedef struct FILESYSTEM {
 	wchar_t Label[MAX_PATH];
 } FILESYSTEM;
 
+// Returns FALSE if the file system is either empty or outside the bounds of
+// the container.
+// TODO: Actually "partition" the view of [Image] and prevent overlapping
+// partitions?
+bool FSNew(CONTAINER *Image, unsigned int PartNum, uint64_t Start, uint64_t End);
+
 BOOL FSLabelSetA(FILESYSTEM* FS, const char *Label, size_t LabelLen);
 
 typedef struct CONTAINER {
