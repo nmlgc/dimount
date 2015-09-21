@@ -25,21 +25,10 @@ int ImagePTFormatProbe(CONTAINER *Image)
 		partitions_found = (*p)->Probe(Image);
 		if(partitions_found) {
 			Image->PTFormat = *p;
-			break;
+			return partitions_found;
 		}
 	}
-	if(!Image->PTFormat) {
-		return -1;
-	}
-	for(unsigned int i = 0; i < partitions_found; i++) {
-		FILESYSTEM *fs = &Image->Partitions[i];
-		if(!FSNew(Image, i, fs->Start, fs->End)) {
-			memmove(fs, fs + 1, sizeof(Image->Partitions) - i * sizeof(FILESYSTEM));
-			i--;
-			partitions_found--;
-		}
-	}
-	return partitions_found;
+	return -1;
 }
 
 const CFORMAT* ImageCFormatProbe(CONTAINER *Image)
@@ -59,11 +48,11 @@ const CFORMAT* ImageCFormatProbe(CONTAINER *Image)
 
 /// Instance types
 /// --------------
-bool FSNew(CONTAINER *Image, unsigned int PartNum, uint64_t Start, uint64_t End)
+FILESYSTEM* FSNew(CONTAINER *Image, unsigned int PartNum, uint64_t Start, uint64_t End)
 {
 	assert(Image);
-	if(Start == End) {
-		return false;
+	if(Start == End || !CAt(Image, Start, 1)) {
+		return NULL;
 	}
 	FILESYSTEM *fs = &Image->Partitions[PartNum];
 	fs->Image = Image;
@@ -74,9 +63,9 @@ bool FSNew(CONTAINER *Image, unsigned int PartNum, uint64_t Start, uint64_t End)
 			L"**Error** Partition #%u (%llu - %llu) exceeds container size (%llu bytes)\n",
 			PartNum + 1, fs->Start, fs->End, Image->CSize - Image->Sector0Offset
 		);
-		return false;
+		return NULL;
 	}
-	return true;
+	return fs;
 }
 
 BOOL FSLabelSetA(FILESYSTEM* FS, const char *Label, size_t LabelLen)

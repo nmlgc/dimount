@@ -53,8 +53,7 @@ typedef int FindFiles_t(FILESYSTEM *FS, const void* DirName, uint64_t *State, vo
 typedef struct PTFORMAT {
 	// User-friendly name of the format.
 	const wchar_t *Name;
-	// Fills [Image]->Partitions with the start and end positions of all
-	// partitions in the container and returns the number of partitions found.
+	// Calls FSNew() for every partition found and returns their total number.
 	unsigned int(*Probe)(CONTAINER *Image);
 } PTFORMAT;
 
@@ -108,11 +107,11 @@ typedef struct FILESYSTEM {
 	wchar_t Label[MAX_PATH];
 } FILESYSTEM;
 
-// Returns FALSE if the file system is either empty or outside the bounds of
-// the container.
+// Returns a pointer to the new file system, or NULL if the file system is
+// either empty or outside the bounds of the container.
 // TODO: Actually "partition" the view of [Image] and prevent overlapping
 // partitions?
-bool FSNew(CONTAINER *Image, unsigned int PartNum, uint64_t Start, uint64_t End);
+FILESYSTEM* FSNew(CONTAINER *Image, unsigned int PartNum, uint64_t Start, uint64_t End);
 
 BOOL FSLabelSetA(FILESYSTEM* FS, const char *Label, size_t LabelLen);
 
