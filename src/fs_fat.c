@@ -65,12 +65,7 @@ static size_t FAT_NameComponentCopy(char *dst, const char *src, size_t len)
 {
 	assert(dst);
 	assert(src);
-	int e = (int)(len) - 1;
-	// Apparently, spaces are technically allowed in filenames, so we just
-	// remove trailing ones.
-	while(e >= 0 && src[e--] == ' ') {
-		len--;
-	}
+	len = TrimmedLength(src, len);
 	memcpy(dst, src, len);
 	dst[len] = '\0';
 	return len;

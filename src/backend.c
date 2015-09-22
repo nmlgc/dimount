@@ -71,7 +71,9 @@ FILESYSTEM* FSNew(CONTAINER *Image, unsigned int PartNum, uint64_t Start, uint64
 BOOL FSLabelSetA(FILESYSTEM* FS, const char *Label, size_t LabelLen)
 {
 	assert(FS);
-	return MultiByteToWideChar(FS->CodePage, 0, Label, -1, FS->Label, LabelLen);
+	return MultiByteToWideChar(
+		FS->CodePage, 0, Label, -1, FS->Label, TrimmedLength(Label, LabelLen)
+	);
 }
 /// --------------
 

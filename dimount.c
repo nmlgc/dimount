@@ -13,6 +13,7 @@
 #include <dokan.h>
 
 #include "src/backend.h"
+#include "src/utils.c"
 
 #include "src/fs_fat.c"
 #include "src/pt_nec.c"
