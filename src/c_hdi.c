@@ -17,15 +17,15 @@ typedef struct {
 
 uint64_t C_HDI_Probe(CONTAINER *Image)
 {
-	HDIHDR *hdi = (HDIHDR*)Image->View;
-	if(Image->CSize <= sizeof(HDIHDR)) {
+	HDIHDR *hdi = StructAt(HDIHDR, Image->View, 0);
+	if(!hdi) {
 		return -1;
 	}
 	uint64_t expsize =
 		hdi->SectorSize * hdi->Sectors * hdi->Heads * hdi->Cylinders;
 	if(
 		hdi->HDDSize != expsize
-		|| Image->CSize < (hdi->HeaderSize + hdi->HDDSize)
+		|| !At(&Image->View, hdi->HeaderSize + hdi->HDDSize, 0)
 	) {
 		return -1;
 	}

@@ -91,18 +91,40 @@ int ImagePTFormatProbe(CONTAINER *Image);
 const CFORMAT* ImageCFormatProbe(CONTAINER *Image);
 /// -------
 
+/// Addressing
+/// ----------
+typedef struct {
+	uint8_t *Memory;
+	uint64_t Size;
+} VIEW;
+
+uint8_t *At(VIEW *View, uint64_t Pos, UINT Size);
+uint8_t* CAtCHS(CONTAINER *Image, CHS *Pos, UINT Size);
+
+#define LAt(Layer, Pos, Size) \
+	At(&(Layer)->View, Pos, Size)
+
+#define StructAt(Type, View, Pos) \
+	(Type*)At(&(View), (Pos), sizeof(Type))
+
+#define LStructAt(Type, Layer, Pos) \
+	StructAt(Type, (Layer)->View, Pos)
+
+#define CStructAtCHS(Type, Image, Pos) \
+	(Type*)CAtCHS(Image, (Pos), sizeof(Type))
+/// ----------
+
 /// Instance types
 /// --------------
 typedef struct FILESYSTEM {
 	CONTAINER *Image; // CONTAINER that contains this file system
+	VIEW View;
 	const FSFORMAT *FSFormat;
 	// Custom filesystem-specific data, allocated using HeapAlloc()
 	void *FSData;
 
 	UINT SectorSize;
 	UINT CodePage;
-	uint64_t Start;
-	uint64_t End;
 	uint32_t Serial;
 	wchar_t Label[MAX_PATH];
 } FILESYSTEM;
@@ -116,30 +138,11 @@ FILESYSTEM* FSNew(CONTAINER *Image, unsigned int PartNum, uint64_t Start, uint64
 BOOL FSLabelSetA(FILESYSTEM* FS, const char *Label, size_t LabelLen);
 
 typedef struct CONTAINER {
-	UINT CodePage;
-	uint64_t Sector0Offset;
-	uint64_t CSize;
 	const CFORMAT *CFormat;
 	const PTFORMAT *PTFormat;
+	VIEW View;
 	CHS CHSSizes;
-	uint8_t *View;
+	UINT CodePage;
 	FILESYSTEM Partitions[16];
 } CONTAINER;
 /// --------------
-
-/// Addressing
-/// ----------
-uint8_t* FSAt(FILESYSTEM *FS, uint64_t Pos, UINT Size);
-
-#define FSStructAt(Type, FS, Pos) \
-	(Type*)FSAt(FS, (Pos), sizeof(Type))
-
-uint8_t* CAt(CONTAINER *Image, uint64_t Pos, UINT Size);
-uint8_t* CAtCHS(CONTAINER *Image, CHS *Pos, UINT Size);
-
-#define CStructAt(Type, Image, Pos) \
-	(Type*)CAt(Image, (Pos), sizeof(Type))
-
-#define CStructAtCHS(Type, Image, Pos) \
-	(Type*)CAtCHS(Image, (Pos), sizeof(Type))
-/// ----------

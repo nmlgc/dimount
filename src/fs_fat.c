@@ -49,7 +49,7 @@ typedef struct {
 } FAT_INFO;
 
 #define FBR_GET \
-	const FAT_BOOT_RECORD *fbr = FSStructAt(FAT_BOOT_RECORD, FS, 0);
+	const FAT_BOOT_RECORD *fbr = LStructAt(FAT_BOOT_RECORD, FS, 0);
 #define FAT_INFO_GET \
 	const FAT_INFO *fat_info = FS->FSData;
 #define FBR_GET_ASSERT \
@@ -89,10 +89,10 @@ int FS_FAT_Probe(FILESYSTEM *FS)
 	uint32_t sectors = fbr->Sectors16 ? fbr->Sectors16 : fbr->Sectors32;
 	uint32_t root_dir_sector = fbr->SecsReserved + (fbr->FATLength * fbr->FATs);
 	uint32_t size = sectors * FS->SectorSize;
-	if(!FSAt(FS, size, 0) || !FAT_ValidMedia(fbr->Media)) {
+	if(!LAt(FS, size, 0) || !FAT_ValidMedia(fbr->Media)) {
 		return 1;
 	}
-	FS->End = FS->Start + size;
+	FS->View.Size = size;
 	FS->Serial = fbr->Serial;
 
 	FS->FSData = HeapAlloc(GetProcessHeap(), 0, sizeof(FAT_INFO));
@@ -100,7 +100,7 @@ int FS_FAT_Probe(FILESYSTEM *FS)
 		return ERROR_OUTOFMEMORY;
 	}
 	FAT_INFO *fat_info = FS->FSData;
-	fat_info->RootDir = FSStructAt(
+	fat_info->RootDir = LStructAt(
 		FAT_DIR_ENTRY, FS, root_dir_sector * FS->SectorSize
 	);
 	fat_info->Sectors = sectors;

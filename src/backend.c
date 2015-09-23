@@ -37,9 +37,13 @@ const CFORMAT* ImageCFormatProbe(CONTAINER *Image)
 	for(const CFORMAT **c = CFormats; *c; c++) {
 		uint64_t offset = (*c)->Probe(Image);
 		if(offset != -1) {
-			Image->Sector0Offset = offset;
-			Image->CFormat = *c;
-			return *c;
+			uint8_t *memory = LAt(Image, offset, 1);
+			if(memory) {
+				Image->View.Memory = memory;
+				Image->View.Size -= offset;
+				Image->CFormat = *c;
+				return *c;
+			}
 		}
 	}
 	return NULL;
@@ -51,17 +55,19 @@ const CFORMAT* ImageCFormatProbe(CONTAINER *Image)
 FILESYSTEM* FSNew(CONTAINER *Image, unsigned int PartNum, uint64_t Start, uint64_t End)
 {
 	assert(Image);
-	if(Start == End || !CAt(Image, Start, 1)) {
+	uint8_t *memory = LAt(Image, Start, 1);
+	uint64_t size = End - Start;
+	if(!size || !memory) {
 		return NULL;
 	}
 	FILESYSTEM *fs = &Image->Partitions[PartNum];
 	fs->Image = Image;
-	fs->Start = Start;
-	fs->End = End;
-	if(!FSAt(fs, fs->End - fs->Start, 0)) {
+	fs->View.Memory = memory;
+	fs->View.Size = size;
+	if(!LAt(fs, size, 0)) {
 		fwprintf(stderr,
 			L"**Error** Partition #%u (%llu - %llu) exceeds container size (%llu bytes)\n",
-			PartNum + 1, fs->Start, fs->End, Image->CSize - Image->Sector0Offset
+			PartNum + 1, Start, End, Image->View.Size
 		);
 		return NULL;
 	}
@@ -79,19 +85,11 @@ BOOL FSLabelSetA(FILESYSTEM* FS, const char *Label, size_t LabelLen)
 
 /// Addressing
 /// ----------
-uint8_t* FSAt(FILESYSTEM *FS, uint64_t Pos, UINT Size)
+uint8_t *At(VIEW *View, uint64_t Pos, UINT Size)
 {
-	assert(FS);
-	assert(FS->Image);
-	uint8_t *ret = CAt(FS->Image, FS->Start + Pos, Size);
-	return ret && ((Pos + Size) <= FS->End) ? ret : NULL;
-}
-
-uint8_t* CAt(CONTAINER *Image, uint64_t Pos, UINT Size)
-{
-	assert(Image);
-	uint8_t *ret = Image->View + Image->Sector0Offset + Pos;
-	return (ret + Size) <= (Image->View + Image->CSize) ? ret : NULL;
+	assert(View);
+	assert(View->Memory);
+	return (Pos + Size) <= View->Size ? View->Memory + Pos : NULL;
 }
 
 uint8_t* CAtCHS(CONTAINER *Image, CHS *Pos, UINT Size)
@@ -102,6 +100,6 @@ uint8_t* CAtCHS(CONTAINER *Image, CHS *Pos, UINT Size)
 		+ Pos->Head * Image->CHSSizes.Head
 		+ Pos->Sector * Image->CHSSizes.Sector
 	);
-	return CAt(Image, bytepos, Size);
+	return At(&Image->View, bytepos, Size);
 }
 /// ----------

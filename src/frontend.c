@@ -207,8 +207,7 @@ int dimount(const wchar_t *Mountpoint, const wchar_t *ImageFN)
 	W32_ERR_REPORT(!GetFileSizeEx(image_file, &image_size),
 		-3, L"Error retrieving the file size of %s", ImageFN
 	);
-	image.CSize = image_size.QuadPart;
-	if(image.CSize == 0) {
+	if(image_size.QuadPart == 0) {
 		fwprintf(stderr, L"Not mounting an empty file.\n");
 		ret = -4;
 		goto end;
@@ -222,9 +221,10 @@ int dimount(const wchar_t *Mountpoint, const wchar_t *ImageFN)
 	);
 
 	// TODO: Writable, again.
-	image.View = MapViewOfFile(image_map, FILE_MAP_READ, 0, 0, 0);
+	image.View.Memory = MapViewOfFile(image_map, FILE_MAP_READ, 0, 0, 0);
+	image.View.Size = image_size.QuadPart;
 	W32_ERR_REPORT(
-		!image.View, -6, L"Error mapping %s into memory", ImageFN
+		!image.View.Memory, -6, L"Error mapping %s into memory", ImageFN
 	);
 	if(ImageCFormatProbe(&image)) {
 		fwprintf(stdout, L"Container format: %s\n", image.CFormat->Name);
@@ -275,7 +275,7 @@ int dimount(const wchar_t *Mountpoint, const wchar_t *ImageFN)
 	ret = DokanMain(&options, &operations);
 
 end:
-	UnmapViewOfFile(image.View);
+	UnmapViewOfFile(image.View.Memory);
 	CloseHandle(image_map);
 	CloseHandle(image_file);
 	return ret;
