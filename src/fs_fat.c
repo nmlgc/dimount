@@ -13,13 +13,13 @@ typedef struct {
 	uint16_t SecsReserved; // reserved sectors
 	uint8_t	FATs; // number of FATs
 	uint16_t RootDirEntries;
-	uint16_t Sectors16; // 16-bit number of sectors
+	uint16_t FSSectors16; // 16-bit number of sectors
 	uint8_t	Media; // media code
-	uint16_t FATLength; // sectors/FAT
+	uint16_t FATSectors16; // sectors/FAT
 	uint16_t SecsPerTrack; // sectors per track
 	uint16_t Heads; // number of heads
 	uint32_t SecsHidden; // hidden sectors (unused)
-	uint32_t Sectors32; // 32-bit number of sectors (if sectors_16 == 0)
+	uint32_t FSSectors32; // 32-bit number of sectors (if FSSectors16 == 0)
 	uint8_t OSData[3]; // ???
 	uint32_t Serial; // serial number
 } FAT_BOOT_RECORD;
@@ -44,7 +44,7 @@ typedef struct {
 // Some precalculated filesystem constants
 typedef struct {
 	FAT_DIR_ENTRY *RootDir;
-	uint32_t Sectors;
+	uint32_t FSSectors;
 	uint32_t DataSectors;
 } FAT_INFO;
 
@@ -86,8 +86,8 @@ int FS_FAT_Probe(FILESYSTEM *FS)
 		return 1;
 	}
 	FS->SectorSize = fbr->SecSize;
-	uint32_t sectors = fbr->Sectors16 ? fbr->Sectors16 : fbr->Sectors32;
-	uint32_t root_dir_sector = fbr->SecsReserved + (fbr->FATLength * fbr->FATs);
+	uint32_t sectors = fbr->FSSectors16 ? fbr->FSSectors16 : fbr->FSSectors32;
+	uint32_t root_dir_sector = fbr->SecsReserved + (fbr->FATSectors16 * fbr->FATs);
 	uint32_t size = sectors * FS->SectorSize;
 	if(!LAt(FS, size, 0) || !FAT_ValidMedia(fbr->Media)) {
 		return 1;
@@ -101,7 +101,7 @@ int FS_FAT_Probe(FILESYSTEM *FS)
 	}
 	FAT_INFO *fat_info = FS->FSData;
 	fat_info->RootDir = FSStructAtSector(FAT_DIR_ENTRY, FS, root_dir_sector);
-	fat_info->Sectors = sectors;
+	fat_info->FSSectors = sectors;
 	fat_info->DataSectors = sectors - root_dir_sector;
 	return 0;
 }
