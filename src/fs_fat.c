@@ -100,9 +100,7 @@ int FS_FAT_Probe(FILESYSTEM *FS)
 		return ERROR_OUTOFMEMORY;
 	}
 	FAT_INFO *fat_info = FS->FSData;
-	fat_info->RootDir = LStructAt(
-		FAT_DIR_ENTRY, FS, root_dir_sector * FS->SectorSize
-	);
+	fat_info->RootDir = FSStructAtSector(FAT_DIR_ENTRY, FS, root_dir_sector);
 	fat_info->Sectors = sectors;
 	fat_info->DataSectors = sectors - root_dir_sector;
 	return 0;

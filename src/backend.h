@@ -110,6 +110,12 @@ uint8_t* CAtCHS(CONTAINER *Image, CHS *Pos, UINT Size);
 #define LStructAt(Type, Layer, Pos) \
 	StructAt(Type, (Layer)->View, Pos)
 
+#define FSAtSector(FS, Pos, SizeInSectors) \
+	LAt(FS, (Pos) * (FS)->SectorSize, (SizeInSectors) * (FS)->SectorSize)
+
+#define FSStructAtSector(Type, FS, Pos) \
+	LStructAt(Type, FS, (Pos) * (FS)->SectorSize)
+
 #define CStructAtCHS(Type, Image, Pos) \
 	(Type*)CAtCHS(Image, (Pos), sizeof(Type))
 /// ----------
