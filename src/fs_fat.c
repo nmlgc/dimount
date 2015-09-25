@@ -4,7 +4,26 @@
  * FAT file system.
  */
 
+typedef enum {
+	FAT_UNKNOWN,
+	FAT12 = 1,
+	FAT16 = 2,
+	FAT32 = 3
+} FAT_TYPE;
+
+const uint32_t FAT_CLUSTERS_MIN[4] = {0, 2, 0xFF7, 0xFFF7};
+const uint32_t FAT_CLUSTERS_MAX[4] = {0, 0xFF6, 0xFFF6, 0x0FFFFFF6};
+
 #pragma pack(push, 1)
+typedef struct {
+	uint8_t DriveNumber;
+	uint8_t MountState;
+	uint8_t Signature;
+	uint32_t Serial;
+	char Label[11];
+	char FSType[8];
+} FAT_EXTENDED_BOOT_RECORD;
+
 typedef struct {
 	uint8_t Jump[3]; // Boot strap short or near jump
 	uint8_t SystemID[8]; // Name - can be used to special case partition manager volumes
@@ -20,8 +39,20 @@ typedef struct {
 	uint16_t Heads; // number of heads
 	uint32_t SecsHidden; // hidden sectors (unused)
 	uint32_t FSSectors32; // 32-bit number of sectors (if FSSectors16 == 0)
-	uint8_t OSData[3]; // ???
-	uint32_t Serial; // serial number
+
+	union {
+		FAT_EXTENDED_BOOT_RECORD EBPB;
+
+		struct {
+			uint32_t FATSectors32;
+			uint16_t Flags;
+			uint16_t Version;
+			uint32_t RootDirCluster;
+			uint16_t FSInfoSector;
+			uint16_t BootBackupSector;
+			FAT_EXTENDED_BOOT_RECORD EBPB;
+		} FAT32;
+	};
 } FAT_BOOT_RECORD;
 
 typedef struct {
@@ -41,11 +72,16 @@ typedef struct {
 } FAT_DIR_ENTRY;
 #pragma pack(pop)
 
+typedef uint32_t FAT_Lookup_t(void *fat, uint32_t Num);
+
 // Some precalculated filesystem constants
 typedef struct {
 	FAT_DIR_ENTRY *RootDir;
+	FAT_TYPE Type;
 	uint32_t FSSectors;
+	uint32_t FATSectors;
 	uint32_t DataSectors;
+	uint32_t Clusters;
 } FAT_INFO;
 
 #define FBR_GET \
@@ -73,36 +109,112 @@ static size_t FAT_NameComponentCopy(char *dst, const char *src, size_t len)
 
 const wchar_t* FS_FAT_Name(FILESYSTEM *FS)
 {
-	return L"FAT";
+	if(!FS) {
+		return L"FAT";
+	}
+	FAT_INFO_GET;
+	switch(fat_info->Type) {
+	case FAT12:
+		return L"FAT12";
+	case FAT16:
+		return L"FAT16";
+	case FAT32:
+		return L"FAT32";
+	default:
+		return L"(unknown)";
+	}
+}
+
+static FAT_TYPE FAT_TypeFromField(const char *Type)
+{
+	if(!memcmp(Type, "FAT12   ", 8)) {
+		return FAT12;
+	} else if(!memcmp(Type, "FAT16   ", 8)) {
+		return FAT16;
+	} else if(!memcmp(Type, "FAT32   ", 8)) {
+		return FAT32;
+	}
+	return FAT_UNKNOWN;
+}
+
+static FAT_TYPE FAT_TypeFromClusterCount(uint32_t Count)
+{
+	for(FAT_TYPE i = FAT12; i <= FAT32; i++) {
+		if(Count >= FAT_CLUSTERS_MIN[i] && Count <= FAT_CLUSTERS_MAX[i]) {
+			return i;
+		}
+	}
+	return FAT_UNKNOWN;
 }
 
 int FS_FAT_Probe(FILESYSTEM *FS)
 {
+	FAT_INFO fi = {0};
 	FBR_GET;
 	if(!fbr) {
 		return 1;
 	}
-	if(fbr->FATs == 0) {
+	if(!FAT_ValidMedia(fbr->Media) || fbr->FATs == 0) {
 		return 1;
 	}
 	FS->SectorSize = fbr->SecSize;
-	uint32_t sectors = fbr->FSSectors16 ? fbr->FSSectors16 : fbr->FSSectors32;
-	uint32_t root_dir_sector = fbr->SecsReserved + (fbr->FATSectors16 * fbr->FATs);
-	uint32_t size = sectors * FS->SectorSize;
-	if(!LAt(FS, size, 0) || !FAT_ValidMedia(fbr->Media)) {
+
+	// Sort of reliably determine the FAT width using the algorithm from
+	// http://homepage.ntlworld.com/jonathan.deboynepollard/FGA/determining-fat-widths.html
+
+	fi.FSSectors = fbr->FSSectors16 ? fbr->FSSectors16 : fbr->FSSectors32;
+
+	if(fbr->FAT32.EBPB.Signature == 0x28 || fbr->FAT32.EBPB.Signature == 0x29) {
+		fi.FATSectors = fbr->FATSectors16 ? fbr->FATSectors16 : fbr->FAT32.FATSectors32;
+		fi.Type = FAT_TypeFromField(fbr->FAT32.EBPB.FSType);
+	} else {
+		fi.FATSectors = fbr->FATSectors16;
+		fi.Type = FAT_TypeFromField(fbr->EBPB.FSType);
+	}
+	uint32_t root_dir_len =
+		fbr->RootDirEntries * sizeof(FAT_DIR_ENTRY) + fbr->SecSize - 1;
+	uint32_t root_dir_start_sec = fbr->SecsReserved + (fi.FATSectors * fbr->FATs);
+	uint32_t data_start_sec = root_dir_start_sec + (root_dir_len / fbr->SecSize);
+	fi.DataSectors = fi.FSSectors - data_start_sec;
+	fi.Clusters = 2 + fi.DataSectors / fbr->SecsPerClus;
+	fi.RootDir = FSStructAtSector(FAT_DIR_ENTRY, FS, root_dir_start_sec);
+	if(fi.Type == FAT_UNKNOWN) {
+		fi.Type = FAT_TypeFromClusterCount(fi.Clusters);
+		if(fi.Type == FAT_UNKNOWN) {
+			return 1;
+		}
+	}
+	uint32_t size = fi.FSSectors * FS->SectorSize;
+	if(!LAt(FS, size, 0)) {
 		return 1;
 	}
 	FS->View.Size = size;
-	FS->Serial = fbr->Serial;
+
+	uint32_t max_clusters = fi.FATSectors * fbr->SecSize;
+	switch(fi.Type) {
+	case FAT12:
+		max_clusters = (max_clusters * 2) / 3;
+		FS->Serial = fbr->EBPB.Serial;
+		break;
+	case FAT16:
+		max_clusters /= 2;
+		FS->Serial = fbr->EBPB.Serial;
+		break;
+	case FAT32:
+		max_clusters /= 4;
+		FS->Serial = fbr->FAT32.EBPB.Serial;
+		break;
+	}
+	fi.Clusters = fi.DataSectors / fbr->SecsPerClus;
+	if(fi.Clusters > max_clusters) {
+		return 1;
+	}
 
 	FS->FSData = HeapAlloc(GetProcessHeap(), 0, sizeof(FAT_INFO));
 	if(!FS->FSData) {
 		return ERROR_OUTOFMEMORY;
 	}
-	FAT_INFO *fat_info = FS->FSData;
-	fat_info->RootDir = FSStructAtSector(FAT_DIR_ENTRY, FS, root_dir_sector);
-	fat_info->FSSectors = sectors;
-	fat_info->DataSectors = sectors - root_dir_sector;
+	memcpy(FS->FSData, &fi, sizeof(FAT_INFO));
 	return 0;
 }
 
