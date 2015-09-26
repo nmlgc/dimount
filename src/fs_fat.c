@@ -90,7 +90,7 @@ typedef struct {
 #define FBR_GET \
 	const FAT_BOOT_RECORD *fbr = LStructAt(FAT_BOOT_RECORD, FS, 0);
 #define FAT_INFO_GET \
-	const FAT_INFO *fat_info = FS->FSData;
+	FAT_INFO *fat_info = FS->FSData;
 #define FBR_GET_ASSERT \
 	FBR_GET; \
 	assert(fbr);
@@ -275,9 +275,15 @@ int FS_FAT_Probe(FILESYSTEM *FS)
 
 void FS_FAT_DiskSizes(FILESYSTEM *FS, uint64_t *Total, uint64_t *Available)
 {
+	FBR_GET_ASSERT;
 	FAT_INFO_GET;
 	*Total = fat_info->DataSectors * FS->SectorSize;
 	*Available = 0;
+	for(uint32_t i = 2; i < fat_info->Clusters; i++) {
+		if(FAT_ClusterLookup(fat_info, i) == 0) {
+			*Available += FS->SectorSize * fbr->SecsPerClus;
+		}
+	}
 }
 
 int FS_FAT_FindFilesA(FILESYSTEM *FS, const char* DirName, uint64_t *State, WIN32_FIND_DATAA *FD)
