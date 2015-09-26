@@ -77,7 +77,10 @@ typedef uint32_t FAT_Lookup_t(void *fat, uint32_t Num);
 // Some precalculated filesystem constants
 typedef struct {
 	FAT_DIR_ENTRY *RootDir;
+	FAT_Lookup_t *Lookup;
+	uint8_t **FATs;
 	FAT_TYPE Type;
+	uint32_t ClusterChainEnd;
 	uint32_t FSSectors;
 	uint32_t FATSectors;
 	uint32_t DataSectors;
@@ -105,6 +108,44 @@ static size_t FAT_NameComponentCopy(char *dst, const char *src, size_t len)
 	memcpy(dst, src, len);
 	dst[len] = '\0';
 	return len;
+}
+
+uint32_t FAT12_ClusterLookup(uint8_t *fat, uint32_t Num)
+{
+	uint32_t c = (Num * 3) / 2;
+	uint32_t ret;
+	if(Num & 1) {
+		ret = (fat[c] & 0xF0) >> 4 | (fat[c + 1] << 4);
+	} else {
+		ret = fat[c] | (fat[c + 1] & 0xF) << 8;
+	}
+	if(ret > FAT_CLUSTERS_MAX[FAT12]) {
+		ret |= 0x0FFFF000;
+	}
+	return ret;
+}
+
+uint32_t FAT16_ClusterLookup(uint16_t *fat, uint32_t Num)
+{
+	uint32_t ret = fat[Num];
+	if(ret > FAT_CLUSTERS_MAX[FAT16]) {
+		ret |= 0x0FFF0000;
+	}
+	return ret;
+}
+
+uint32_t FAT32_ClusterLookup(uint32_t *fat, uint32_t Num)
+{
+	return fat[Num] & 0x0FFFFFFF;
+}
+
+uint32_t FAT_ClusterLookup(FAT_INFO *FI, uint32_t Num)
+{
+	uint8_t *fat = FI->FATs[0];
+	if(Num < FI->Clusters) {
+		return FI->Lookup(fat, Num);
+	}
+	return 0;
 }
 
 const wchar_t* FS_FAT_Name(FILESYSTEM *FS)
@@ -193,14 +234,17 @@ int FS_FAT_Probe(FILESYSTEM *FS)
 	uint32_t max_clusters = fi.FATSectors * fbr->SecSize;
 	switch(fi.Type) {
 	case FAT12:
+		fi.Lookup = FAT12_ClusterLookup;
 		max_clusters = (max_clusters * 2) / 3;
 		FS->Serial = fbr->EBPB.Serial;
 		break;
 	case FAT16:
+		fi.Lookup = FAT16_ClusterLookup;
 		max_clusters /= 2;
 		FS->Serial = fbr->EBPB.Serial;
 		break;
 	case FAT32:
+		fi.Lookup = FAT32_ClusterLookup;
 		max_clusters /= 4;
 		FS->Serial = fbr->FAT32.EBPB.Serial;
 		break;
@@ -210,10 +254,21 @@ int FS_FAT_Probe(FILESYSTEM *FS)
 		return 1;
 	}
 
+	fi.FATs = HeapAlloc(GetProcessHeap(), 0, sizeof(uint8_t*) * fbr->FATs);
+	if(!fi.FATs) {
+		return ERROR_OUTOFMEMORY;
+	}
+	for(uint8_t i = 0; i < fbr->FATs; i++) {
+		fi.FATs[i] = FSAtSector(
+			FS, fbr->SecsReserved + (fi.FATSectors * i), fi.FATSectors
+		);
+	}
+
 	FS->FSData = HeapAlloc(GetProcessHeap(), 0, sizeof(FAT_INFO));
 	if(!FS->FSData) {
 		return ERROR_OUTOFMEMORY;
 	}
+	fi.ClusterChainEnd = FAT_ClusterLookup(&fi, 1);
 	memcpy(FS->FSData, &fi, sizeof(FAT_INFO));
 	return 0;
 }
