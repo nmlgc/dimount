@@ -11,8 +11,11 @@ typedef enum {
 	FAT32 = 3
 } FAT_TYPE;
 
-const uint32_t FAT_CLUSTERS_MIN[4] = {0, 2, 0xFF7, 0xFFF7};
-const uint32_t FAT_CLUSTERS_MAX[4] = {0, 0xFF6, 0xFFF6, 0x0FFFFFF6};
+// FAT cluster number. Since we only need 28 bits, signed is better here.
+typedef int32_t fat_cluster_t;
+
+const fat_cluster_t FAT_CLUSTERS_MIN[4] = {0, 2, 0xFF7, 0xFFF7};
+const fat_cluster_t FAT_CLUSTERS_MAX[4] = {0, 0xFF6, 0xFFF6, 0x0FFFFFF6};
 
 #pragma pack(push, 1)
 typedef struct {
@@ -72,7 +75,7 @@ typedef struct {
 } FAT_DIR_ENTRY;
 #pragma pack(pop)
 
-typedef uint32_t FAT_Lookup_t(void *fat, uint32_t Num);
+typedef fat_cluster_t FAT_Lookup_t(void *fat, fat_cluster_t Num);
 
 // Some precalculated filesystem constants
 typedef struct {
@@ -80,11 +83,11 @@ typedef struct {
 	FAT_Lookup_t *Lookup;
 	uint8_t **FATs;
 	FAT_TYPE Type;
-	uint32_t ClusterChainEnd;
+	fat_cluster_t ClusterChainEnd;
 	uint32_t FSSectors;
 	uint32_t FATSectors;
 	uint32_t DataSectors;
-	uint32_t Clusters;
+	fat_cluster_t Clusters;
 } FAT_INFO;
 
 #define FBR_GET \
@@ -110,10 +113,10 @@ static size_t FAT_NameComponentCopy(char *dst, const char *src, size_t len)
 	return len;
 }
 
-uint32_t FAT12_ClusterLookup(uint8_t *fat, uint32_t Num)
+fat_cluster_t FAT12_ClusterLookup(uint8_t *fat, fat_cluster_t Num)
 {
-	uint32_t c = (Num * 3) / 2;
-	uint32_t ret;
+	fat_cluster_t c = (Num * 3) / 2;
+	fat_cluster_t ret;
 	if(Num & 1) {
 		ret = (fat[c] & 0xF0) >> 4 | (fat[c + 1] << 4);
 	} else {
@@ -125,21 +128,21 @@ uint32_t FAT12_ClusterLookup(uint8_t *fat, uint32_t Num)
 	return ret;
 }
 
-uint32_t FAT16_ClusterLookup(uint16_t *fat, uint32_t Num)
+fat_cluster_t FAT16_ClusterLookup(uint16_t *fat, fat_cluster_t Num)
 {
-	uint32_t ret = fat[Num];
+	fat_cluster_t ret = fat[Num];
 	if(ret > FAT_CLUSTERS_MAX[FAT16]) {
 		ret |= 0x0FFF0000;
 	}
 	return ret;
 }
 
-uint32_t FAT32_ClusterLookup(uint32_t *fat, uint32_t Num)
+fat_cluster_t FAT32_ClusterLookup(uint32_t *fat, fat_cluster_t Num)
 {
 	return fat[Num] & 0x0FFFFFFF;
 }
 
-uint32_t FAT_ClusterLookup(FAT_INFO *FI, uint32_t Num)
+fat_cluster_t FAT_ClusterLookup(FAT_INFO *FI, fat_cluster_t Num)
 {
 	uint8_t *fat = FI->FATs[0];
 	if(Num < FI->Clusters) {
@@ -178,7 +181,7 @@ static FAT_TYPE FAT_TypeFromField(const char *Type)
 	return FAT_UNKNOWN;
 }
 
-static FAT_TYPE FAT_TypeFromClusterCount(uint32_t Count)
+static FAT_TYPE FAT_TypeFromClusterCount(fat_cluster_t Count)
 {
 	for(FAT_TYPE i = FAT12; i <= FAT32; i++) {
 		if(Count >= FAT_CLUSTERS_MIN[i] && Count <= FAT_CLUSTERS_MAX[i]) {
@@ -231,7 +234,7 @@ int FS_FAT_Probe(FILESYSTEM *FS)
 	}
 	FS->View.Size = size;
 
-	uint32_t max_clusters = fi.FATSectors * fbr->SecSize;
+	fat_cluster_t max_clusters = fi.FATSectors * fbr->SecSize;
 	switch(fi.Type) {
 	case FAT12:
 		fi.Lookup = FAT12_ClusterLookup;
@@ -279,7 +282,7 @@ void FS_FAT_DiskSizes(FILESYSTEM *FS, uint64_t *Total, uint64_t *Available)
 	FAT_INFO_GET;
 	*Total = fat_info->DataSectors * FS->SectorSize;
 	*Available = 0;
-	for(uint32_t i = 2; i < fat_info->Clusters; i++) {
+	for(fat_cluster_t i = 2; i < fat_info->Clusters; i++) {
 		if(FAT_ClusterLookup(fat_info, i) == 0) {
 			*Available += FS->SectorSize * fbr->SecsPerClus;
 		}
