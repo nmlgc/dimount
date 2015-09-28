@@ -2,6 +2,40 @@
  * Dokan Image Mounter - Backend
  */
 
+/// Callbacks
+/// ---------
+static void CopyFindDataAToW(
+	UINT CodePage,
+	LPWIN32_FIND_DATAW fd_w,
+	LPWIN32_FIND_DATAA fd_a
+)
+{
+	fd_w->dwFileAttributes = fd_a->dwFileAttributes;
+	fd_w->ftCreationTime = fd_a->ftCreationTime;
+	fd_w->ftLastAccessTime = fd_a->ftLastAccessTime;
+	fd_w->ftLastWriteTime = fd_a->ftLastWriteTime;
+	fd_w->nFileSizeHigh = fd_a->nFileSizeHigh;
+	fd_w->nFileSizeLow = fd_a->nFileSizeLow;
+	fd_w->dwReserved0 = fd_a->dwReserved0;
+	fd_w->dwReserved1 = fd_a->dwReserved1;
+	MultiByteToWideChar(
+		CodePage, 0, fd_a->cFileName, -1, fd_w->cFileName, sizeof(fd_w->cFileName)
+	);
+}
+
+int FindAddFileA(FIND_CALLBACK_DATA *FCD, WIN32_FIND_DATAA *FD)
+{
+	WIN32_FIND_DATAW fd_w;
+	CopyFindDataAToW(FCD->FS->CodePage, &fd_w, FD);
+	return FindAddFileW(FCD, &fd_w);
+}
+
+int FindAddFileW(FIND_CALLBACK_DATA *FCD, WIN32_FIND_DATAW *FD)
+{
+	return FCD->FillFindData(FD, FCD->DokanFileInfo);
+}
+/// ---------
+
 /// Probing
 /// -------
 int ImageFSFormatProbe(FILESYSTEM *FS)

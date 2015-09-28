@@ -289,45 +289,45 @@ void FS_FAT_DiskSizes(FILESYSTEM *FS, uint64_t *Total, uint64_t *Available)
 	}
 }
 
-int FS_FAT_FindFilesA(FILESYSTEM *FS, const char* DirName, uint64_t *State, WIN32_FIND_DATAA *FD)
+void FS_FAT_FindFilesA(FILESYSTEM *FS, const char* DirName, FIND_CALLBACK_DATA *FCD)
 {
 	// Only root directory for now
 	if(strcmp(DirName, "\\")) {
-		return 0;
+		return;
 	}
 	FBR_GET_ASSERT;
 	FAT_INFO_GET;
-	FAT_DIR_ENTRY *dentry = fat_info->RootDir + *State;
-	if(!dentry) {
-		return -1;
-	}
-	unsigned char first = dentry->BaseName[0];
-	if(first == 0x00) {
-		return 0;
-	} else if(first != 0xE5 && (dentry->Attribute & 0x08) == 0) {
-		char ext[sizeof(dentry->Extension) + 1] = {0};
-		FAT_NameComponentCopy(ext, dentry->Extension, sizeof(dentry->Extension));
-		size_t name_len = FAT_NameComponentCopy(
-			FD->cFileName, dentry->BaseName, sizeof(dentry->BaseName)
-		);
-		if(first == 0x05) {
-			FD->cFileName[0] = 0xE5;
+	FAT_DIR_ENTRY *dentry = fat_info->RootDir;
+	for(uint16_t i = 0; i < fbr->RootDirEntries; i++) {
+		WIN32_FIND_DATAA fd;
+		unsigned char first = dentry->BaseName[0];
+		if(first == 0x00) {
+			return;
+		} else if(first != 0xE5 && (dentry->Attribute & 0x08) == 0) {
+			char ext[sizeof(dentry->Extension) + 1] = {0};
+			FAT_NameComponentCopy(ext, dentry->Extension, sizeof(dentry->Extension));
+			size_t name_len = FAT_NameComponentCopy(
+				fd.cFileName, dentry->BaseName, sizeof(dentry->BaseName)
+			);
+			if(first == 0x05) {
+				fd.cFileName[0] = 0xE5;
+			}
+			if(ext[0] != '\0') {
+				fd.cFileName[name_len++] = '.';
+				memcpy(&fd.cFileName[name_len], ext, sizeof(ext));
+			}
+			FILETIME timestamp;
+			DosDateTimeToFileTime(dentry->Date, dentry->Time, &timestamp);
+			fd.nFileSizeHigh = 0;
+			fd.nFileSizeLow = dentry->Size;
+			fd.ftCreationTime = timestamp;
+			fd.ftLastAccessTime = timestamp;
+			fd.ftLastWriteTime = timestamp;
+			fd.dwFileAttributes = dentry->Attribute;
+			FindAddFileA(FCD, &fd);
 		}
-		if(ext[0] != '\0') {
-			FD->cFileName[name_len++] = '.';
-			memcpy(&FD->cFileName[name_len], ext, sizeof(ext));
-		}
-		FILETIME timestamp;
-		DosDateTimeToFileTime(dentry->Date, dentry->Time, &timestamp);
-		FD->nFileSizeHigh = 0;
-		FD->nFileSizeLow = dentry->Size;
-		FD->ftCreationTime = timestamp;
-		FD->ftLastAccessTime = timestamp;
-		FD->ftLastWriteTime = timestamp;
-		FD->dwFileAttributes = dentry->Attribute;
+		dentry++;
 	}
-	(*State)++;
-	return *State < fbr->RootDirEntries;
 }
 
 NEW_FSFORMAT(FAT, 12, A);

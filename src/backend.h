@@ -18,6 +18,18 @@ typedef struct {
 typedef struct CONTAINER CONTAINER;
 typedef struct FILESYSTEM FILESYSTEM;
 
+// Callbacks
+// ---------
+typedef struct {
+	FILESYSTEM *FS;
+	PFillFindData FillFindData;
+	PDOKAN_FILE_INFO DokanFileInfo;
+} FIND_CALLBACK_DATA;
+
+int FindAddFileA(FIND_CALLBACK_DATA *FCD, WIN32_FIND_DATAA *FD);
+int FindAddFileW(FIND_CALLBACK_DATA *FCD, WIN32_FIND_DATAW *FD);
+// ---------
+
 // All callbacks that handle file names come in both A and W functions.
 // Depending on whether the file system stores its filenames in UTF-16 (W) or
 // a different encoding (A), only one of those needs to be implemented.
@@ -32,14 +44,10 @@ typedef struct FSFORMAT {
 	int(*Probe)(FILESYSTEM *FS);
 	// Returns [Total] and [Available] number of bytes on the file system.
 	void(*DiskSizes)(FILESYSTEM *FS, uint64_t *Total, uint64_t *Available);
-	// Fills [FD] with the next file in [DirName]. The implementation can
-	// use [State] to keep track of the current index within the directory.
-	// Returns 1 as long as there are files left, 0 otherwise.
-	int(*FindFilesA)(FILESYSTEM *FS, const char* DirName, uint64_t *State, WIN32_FIND_DATAA *FD);
-	int(*FindFilesW)(FILESYSTEM *FS, const wchar_t* DirName, uint64_t *State, WIN32_FIND_DATAW *FD);
+	// Calls FindAddFileA()/FindAddFileW() for every file in [DirName].
+	void(*FindFilesA)(FILESYSTEM *FS, const char* DirName, FIND_CALLBACK_DATA *FCD);
+	void(*FindFilesW)(FILESYSTEM *FS, const wchar_t* DirName, FIND_CALLBACK_DATA *FCD);
 } FSFORMAT;
-
-typedef int FindFiles_t(FILESYSTEM *FS, const void* DirName, uint64_t *State, void *FD);
 
 #define NEW_FSFORMAT(ID, _FNLength, CharSet) \
 	const FSFORMAT FS_##ID = { \

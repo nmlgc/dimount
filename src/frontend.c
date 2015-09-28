@@ -31,25 +31,6 @@ int ReportError(int ReturnValue, DWORD Error, const wchar_t *Prefix, ...)
 }
 /// ---------------
 
-static void CopyFindDataAToW(
-	UINT CodePage,
-	LPWIN32_FIND_DATAW fd_w,
-	LPWIN32_FIND_DATAA fd_a
-)
-{
-	fd_w->dwFileAttributes = fd_a->dwFileAttributes;
-	fd_w->ftCreationTime = fd_a->ftCreationTime;
-	fd_w->ftLastAccessTime = fd_a->ftLastAccessTime;
-	fd_w->ftLastWriteTime = fd_a->ftLastWriteTime;
-	fd_w->nFileSizeHigh = fd_a->nFileSizeHigh;
-	fd_w->nFileSizeLow = fd_a->nFileSizeLow;
-	fd_w->dwReserved0 = fd_a->dwReserved0;
-	fd_w->dwReserved1 = fd_a->dwReserved1;
-	MultiByteToWideChar(
-		CodePage, 0, fd_a->cFileName, -1, fd_w->cFileName, sizeof(fd_w->cFileName)
-	);
-}
-
 /// Dokan callbacks
 /// ---------------
 #define PrintEnter fprintf(stderr, __FUNCTION__);
@@ -94,32 +75,18 @@ static int DOKAN_CALLBACK DIMFindFiles(
 	fwprintf(stderr, L"(%s)\n", FileNameW);
 #endif
 	bool unicode = fmt->FindFilesW != NULL;
-	const void *filename;
 	char filename_a[MAX_PATH];
-	FindFiles_t *func;
+	FIND_CALLBACK_DATA fcd;
+	fcd.FS = fs;
+	fcd.FillFindData = FillFindData;
+	fcd.DokanFileInfo = DokanFileInfo;
 	if(unicode) {
-		filename = FileNameW;
-		func = fmt->FindFilesW;
+		fmt->FindFilesW(fs, FileNameW, &fcd);
 	} else {
 		WideCharToMultiByte(
 			fs->CodePage, 0, FileNameW, -1, filename_a, sizeof(filename_a), NULL, NULL
 		);
-		filename = filename_a;
-		func = fmt->FindFilesA;
-	}
-	uint64_t state = 0;
-	WIN32_FIND_DATAA fd_a = {0};
-	WIN32_FIND_DATAW fd_w = {0};
-	WIN32_FIND_DATAW *fd_for_fs = unicode ? &fd_w : (WIN32_FIND_DATAW*)&fd_a;
-	while(func(fs, filename, &state, fd_for_fs) > 0) {
-		if(fd_w.cFileName[0] != '\0' || fd_a.cFileName[0] != '\0') {
-			if(!unicode) {
-				CopyFindDataAToW(fs->CodePage, &fd_w, &fd_a);
-			}
-			FillFindData(&fd_w, DokanFileInfo);
-			fd_w.cFileName[0] = '\0';
-			fd_a.cFileName[0] = '\0';
-		}
+		fmt->FindFilesA(fs, filename_a, &fcd);
 	}
 	return 0;
 }
