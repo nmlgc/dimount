@@ -80,6 +80,7 @@ typedef fat_cluster_t FAT_Lookup_t(void *fat, fat_cluster_t Num);
 // Some precalculated filesystem constants
 typedef struct {
 	FAT_DIR_ENTRY *RootDir;
+	VIEW Data;
 	FAT_Lookup_t *Lookup;
 	uint8_t **FATs;
 	FAT_TYPE Type;
@@ -88,6 +89,7 @@ typedef struct {
 	uint32_t FATSectors;
 	uint32_t DataSectors;
 	fat_cluster_t Clusters;
+	uint32_t ClusterSize;
 } FAT_INFO;
 
 #define FBR_GET \
@@ -97,6 +99,15 @@ typedef struct {
 #define FBR_GET_ASSERT \
 	FBR_GET; \
 	assert(fbr);
+
+static uint8_t* FAT_AtCluster(FAT_INFO *FATInfo, fat_cluster_t Cluster)
+{
+	Cluster -= 2;
+	if(Cluster < 2 || Cluster >= FATInfo->Clusters || Cluster == FATInfo->ClusterChainEnd) {
+		return NULL;
+	}
+	return At(&FATInfo->Data, Cluster * FATInfo->ClusterSize, FATInfo->ClusterSize);
+}
 
 static int FAT_ValidMedia(uint8_t media)
 {
@@ -220,7 +231,8 @@ int FS_FAT_Probe(FILESYSTEM *FS)
 	uint32_t root_dir_start_sec = fbr->SecsReserved + (fi.FATSectors * fbr->FATs);
 	uint32_t data_start_sec = root_dir_start_sec + (root_dir_len / fbr->SecSize);
 	fi.DataSectors = fi.FSSectors - data_start_sec;
-	fi.Clusters = 2 + fi.DataSectors / fbr->SecsPerClus;
+	fat_cluster_t actual_clusters = fi.DataSectors / fbr->SecsPerClus;
+	fi.Clusters = 2 + actual_clusters;
 	fi.RootDir = FSStructAtSector(FAT_DIR_ENTRY, FS, root_dir_start_sec);
 	if(fi.Type == FAT_UNKNOWN) {
 		fi.Type = FAT_TypeFromClusterCount(fi.Clusters);
@@ -233,6 +245,10 @@ int FS_FAT_Probe(FILESYSTEM *FS)
 		return 1;
 	}
 	FS->View.Size = size;
+
+	fi.ClusterSize = fbr->SecSize * fbr->SecsPerClus;
+	fi.Data.Size = fi.ClusterSize * actual_clusters;
+	fi.Data.Memory = FSAtSector(FS, data_start_sec, actual_clusters * fbr->SecsPerClus);
 
 	fat_cluster_t max_clusters = fi.FATSectors * fbr->SecSize;
 	switch(fi.Type) {
@@ -278,13 +294,12 @@ int FS_FAT_Probe(FILESYSTEM *FS)
 
 void FS_FAT_DiskSizes(FILESYSTEM *FS, uint64_t *Total, uint64_t *Available)
 {
-	FBR_GET_ASSERT;
 	FAT_INFO_GET;
 	*Total = fat_info->DataSectors * FS->SectorSize;
 	*Available = 0;
 	for(fat_cluster_t i = 2; i < fat_info->Clusters; i++) {
 		if(FAT_ClusterLookup(fat_info, i) == 0) {
-			*Available += FS->SectorSize * fbr->SecsPerClus;
+			*Available += fat_info->ClusterSize;
 		}
 	}
 }
