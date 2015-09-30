@@ -162,6 +162,55 @@ fat_cluster_t FAT_ClusterLookup(FAT_INFO *FI, fat_cluster_t Num)
 	return 0;
 }
 
+/// Directory iteration
+/// -------------------
+typedef struct {
+	fat_cluster_t Cluster;
+	FAT_DIR_ENTRY *Base;
+	uint32_t Index;
+	uint32_t Limit;
+} FAT_DIR_ITERATOR;
+
+static void FAT_DirIterateInit(FILESYSTEM *FS, FAT_DIR_ITERATOR *Iter, fat_cluster_t Cluster)
+{
+	FBR_GET_ASSERT;
+	FAT_INFO_GET;
+	assert(Iter);
+	Iter->Cluster = Cluster;
+	Iter->Index = 0;
+	if(Cluster == 0) {
+		Iter->Base = fat_info->RootDir;
+		Iter->Limit = fbr->RootDirEntries;
+	} else {
+		Iter->Base = (FAT_DIR_ENTRY*)FAT_AtCluster(fat_info, Cluster);
+		Iter->Limit = (fat_info->ClusterSize) / sizeof(FAT_DIR_ENTRY);
+	}
+}
+
+static FAT_DIR_ENTRY* FAT_DirIterate(FILESYSTEM *FS, FAT_DIR_ITERATOR *Iter)
+{
+	FAT_INFO_GET;
+	assert(Iter);
+	if(Iter->Base == NULL) {
+		return NULL;
+	}
+	FAT_DIR_ENTRY *ret = &Iter->Base[Iter->Index];
+	Iter->Index++;
+	if(Iter->Index == Iter->Limit) {
+		if(Iter->Cluster == 0) {
+			// Root directory
+			Iter->Base = NULL;
+		} else {
+			// Subdirectory
+			Iter->Cluster = FAT_ClusterLookup(fat_info, Iter->Cluster);
+			Iter->Base = (FAT_DIR_ENTRY*)FAT_AtCluster(fat_info, Iter->Cluster);
+		}
+		Iter->Index = 0;
+	}
+	return ret;
+}
+/// -------------------
+
 const wchar_t* FS_FAT_Name(FILESYSTEM *FS)
 {
 	if(!FS) {
@@ -310,10 +359,10 @@ void FS_FAT_FindFilesA(FILESYSTEM *FS, const char* DirName, FIND_CALLBACK_DATA *
 	if(strcmp(DirName, "\\")) {
 		return;
 	}
-	FBR_GET_ASSERT;
-	FAT_INFO_GET;
-	FAT_DIR_ENTRY *dentry = fat_info->RootDir;
-	for(uint16_t i = 0; i < fbr->RootDirEntries; i++) {
+	FAT_DIR_ITERATOR iter;
+	FAT_DIR_ENTRY *dentry;
+	FAT_DirIterateInit(FS, &iter, 0);
+	while(dentry = FAT_DirIterate(FS, &iter)) {
 		WIN32_FIND_DATAA fd;
 		unsigned char first = dentry->BaseName[0];
 		if(first == 0x00) {
@@ -341,7 +390,6 @@ void FS_FAT_FindFilesA(FILESYSTEM *FS, const char* DirName, FIND_CALLBACK_DATA *
 			fd.dwFileAttributes = dentry->Attribute;
 			FindAddFileA(FCD, &fd);
 		}
-		dentry++;
 	}
 }
 
