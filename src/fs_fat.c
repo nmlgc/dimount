@@ -114,6 +114,34 @@ static int FAT_ValidMedia(uint8_t media)
 	return 0xf8 <= media || media == 0xf0;
 }
 
+static bool FAT_ToShortName(char *dst, const char *src, size_t src_len)
+{
+	assert(dst);
+	assert(src);
+	size_t base_len = 0;
+	while(src[base_len] != '.' && src[base_len] != '\0' && base_len < src_len) {
+		base_len++;
+	}
+	const char *ext = src + base_len;
+	size_t ext_len = src_len - base_len;
+	if(ext[0] == '.') {
+		ext++;
+		ext_len--;
+	}
+	if(base_len > 8 || ext_len > 3) {
+		fwprintf(stderr, L"**Error** Long filenames not supported yet\n");
+		return false;
+	}
+	memcpy(dst, src, base_len);
+	memset(dst + base_len, ' ', 8 - base_len);
+	memcpy(dst + 8, ext, ext_len);
+	memset(dst + 8 + ext_len, ' ', 3 - ext_len);
+	if(dst[0] == 0xE5) {
+		dst[0] = 0x05;
+	}
+	return true;
+}
+
 static size_t FAT_NameComponentCopy(char *dst, const char *src, size_t len)
 {
 	assert(dst);
@@ -353,15 +381,51 @@ void FS_FAT_DiskSizes(FILESYSTEM *FS, uint64_t *Total, uint64_t *Available)
 	}
 }
 
+static fat_cluster_t FAT_FileLookup(FILESYSTEM *FS, const char *FileName, fat_cluster_t Cluster)
+{
+	assert(FS);
+	assert(FileName);
+	assert(IsDirSep(FileName[0]));
+	char fat_name[8 + 3];
+	FAT_DIR_ITERATOR iter;
+
+	if(FileName[1] == '\0' || FileName[0] == '\0') {
+		return 0;
+	}
+	FileName++;
+	size_t fn_len = 0;
+	while(FileName[fn_len] != '\0' && !IsDirSep(FileName[fn_len])) {
+		fn_len++;
+	}
+	FAT_ToShortName(fat_name, FileName, fn_len);
+	bool directory_expected = IsDirSep(FileName[fn_len]);
+
+	FAT_DirIterateInit(FS, &iter, Cluster);
+	FAT_DIR_ENTRY *dentry;
+	while(dentry = FAT_DirIterate(FS, &iter)) {
+		if(dentry->BaseName[0] == '\0') {
+			break;
+		}
+		if(!_strnicmp(dentry->BaseName, fat_name, sizeof(fat_name))) {
+			if(directory_expected) {
+				if(dentry->Attribute & FILE_ATTRIBUTE_DIRECTORY) {
+					return FAT_FileLookup(
+						FS, FileName + fn_len, dentry->FirstCluster
+					);
+				}
+				break;
+			}
+			return dentry->FirstCluster;
+		}
+	}
+	return -1;
+}
+
 void FS_FAT_FindFilesA(FILESYSTEM *FS, const char* DirName, FIND_CALLBACK_DATA *FCD)
 {
-	// Only root directory for now
-	if(strcmp(DirName, "\\")) {
-		return;
-	}
 	FAT_DIR_ITERATOR iter;
 	FAT_DIR_ENTRY *dentry;
-	FAT_DirIterateInit(FS, &iter, 0);
+	FAT_DirIterateInit(FS, &iter, FAT_FileLookup(FS, DirName, 0));
 	while(dentry = FAT_DirIterate(FS, &iter)) {
 		WIN32_FIND_DATAA fd;
 		unsigned char first = dentry->BaseName[0];
