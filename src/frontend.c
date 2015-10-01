@@ -39,7 +39,7 @@ int ReportError(int ReturnValue, DWORD Error, const wchar_t *Prefix, ...)
 	FILESYSTEM *fs = (FILESYSTEM*)DokanFileInfo->DokanOptions->GlobalContext; \
 	const FSFORMAT *fmt = fs->FSFormat;
 
-static int DOKAN_CALLBACK DIMCreateFile(
+static NTSTATUS DOKAN_CALLBACK DIMCreateFile(
 	LPCWSTR FileName,
 	DWORD AccessMode,
 	DWORD ShareMode,
@@ -60,10 +60,10 @@ static int DOKAN_CALLBACK DIMCreateFile(
 	;
 	fwprintf(stderr, L"(%s, %s)\n", FileName, DISPOSITION);
 #endif
-	return 0;
+	return STATUS_SUCCESS;
 }
 
-static int DOKAN_CALLBACK DIMFindFiles(
+static NTSTATUS DOKAN_CALLBACK DIMFindFiles(
 	LPCWSTR FileNameW,
 	PFillFindData FillFindData,
 	PDOKAN_FILE_INFO DokanFileInfo
@@ -88,10 +88,10 @@ static int DOKAN_CALLBACK DIMFindFiles(
 		);
 		fmt->FindFilesA(fs, filename_a, &fcd);
 	}
-	return 0;
+	return STATUS_SUCCESS;
 }
 
-static int DOKAN_CALLBACK DIMGetDiskFreeSpace(
+static NTSTATUS DOKAN_CALLBACK DIMGetDiskFreeSpace(
 	PULONGLONG FreeBytesAvailable,
 	PULONGLONG TotalNumberOfBytes,
 	PULONGLONG TotalNumberOfFreeBytes,
@@ -104,10 +104,10 @@ static int DOKAN_CALLBACK DIMGetDiskFreeSpace(
 #endif
 	fmt->DiskSizes(fs, TotalNumberOfBytes, TotalNumberOfFreeBytes);
 	*FreeBytesAvailable = *TotalNumberOfFreeBytes;
-	return 0;
+	return STATUS_SUCCESS;
 }
 
-static int DOKAN_CALLBACK DIMGetVolumeInformation(
+static NTSTATUS DOKAN_CALLBACK DIMGetVolumeInformation(
 	LPWSTR VolumeNameBuffer,
 	DWORD VolumeNameSize,
 	LPDWORD VolumeSerialNumber,
@@ -123,16 +123,16 @@ static int DOKAN_CALLBACK DIMGetVolumeInformation(
 	PrintEnterln;
 #endif
 	UNREFERENCED_PARAMETER(DokanFileInfo);
-	wcscpy_s(VolumeNameBuffer, VolumeNameSize / sizeof(WCHAR), fs->Label);
+	wcscpy_s(VolumeNameBuffer, VolumeNameSize, fs->Label);
 	*VolumeSerialNumber = fs->Serial;
 	*MaximumComponentLength = fmt->FNLength;
-	wcscpy_s(FileSystemNameBuffer, FileSystemNameSize / sizeof(WCHAR), fmt->Name(fs));
-	return 1;
+	wcscpy_s(FileSystemNameBuffer, FileSystemNameSize, fmt->Name(fs));
+	return STATUS_SUCCESS;
 }
 
 // This is the magical required function that makes everything else work in
 // Explorer.
-static int DOKAN_CALLBACK DIMOpenDirectory(
+static NTSTATUS DOKAN_CALLBACK DIMOpenDirectory(
 	LPCWSTR FileName,
 	PDOKAN_FILE_INFO DokanFileInfo
 )
@@ -141,7 +141,7 @@ static int DOKAN_CALLBACK DIMOpenDirectory(
 	PrintEnter;
 	fwprintf(stderr, L"(%s)\n", FileName);
 #endif
-	return 0;
+	return STATUS_SUCCESS;
 }
 
 DOKAN_OPERATIONS operations = {
@@ -236,7 +236,10 @@ int dimount(const wchar_t *Mountpoint, const wchar_t *ImageFN)
 		.Version = DOKAN_VERSION,
 		.ThreadCount = 0,
 		.MountPoint = Mountpoint,
-		.Options = DOKAN_OPTION_KEEP_ALIVE | DOKAN_OPTION_DEBUG,
+#ifdef _DEBUG
+		.Options = DOKAN_OPTION_DEBUG,
+		.Timeout = -1,
+#endif
 		.GlobalContext = (ULONG64)fs_to_mount,
 	};
 	ret = DokanMain(&options, &operations);
