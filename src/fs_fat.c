@@ -421,7 +421,7 @@ static fat_cluster_t FAT_FileLookup(FILESYSTEM *FS, const char *FileName, fat_cl
 	return -1;
 }
 
-void FS_FAT_FindFilesA(FILESYSTEM *FS, const char* DirName, FIND_CALLBACK_DATA *FCD)
+NTSTATUS FS_FAT_FindFilesA(FILESYSTEM *FS, const char* DirName, FIND_CALLBACK_DATA *FCD)
 {
 	FAT_DIR_ITERATOR iter;
 	FAT_DIR_ENTRY *dentry;
@@ -430,7 +430,7 @@ void FS_FAT_FindFilesA(FILESYSTEM *FS, const char* DirName, FIND_CALLBACK_DATA *
 		WIN32_FIND_DATAA fd;
 		unsigned char first = dentry->BaseName[0];
 		if(first == 0x00) {
-			return;
+			break;
 		} else if(first != 0xE5 && (dentry->Attribute & 0x08) == 0) {
 			char ext[sizeof(dentry->Extension) + 1] = {0};
 			FAT_NameComponentCopy(ext, dentry->Extension, sizeof(dentry->Extension));
@@ -455,6 +455,7 @@ void FS_FAT_FindFilesA(FILESYSTEM *FS, const char* DirName, FIND_CALLBACK_DATA *
 			FindAddFileA(FCD, &fd);
 		}
 	}
+	return STATUS_SUCCESS;
 }
 
 NEW_FSFORMAT(FAT, 12, A);

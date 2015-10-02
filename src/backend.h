@@ -45,8 +45,8 @@ typedef struct FSFORMAT {
 	// Returns [Total] and [Available] number of bytes on the file system.
 	void(*DiskSizes)(FILESYSTEM *FS, uint64_t *Total, uint64_t *Available);
 	// Calls FindAddFileA()/FindAddFileW() for every file in [DirName].
-	void(*FindFilesA)(FILESYSTEM *FS, const char* DirName, FIND_CALLBACK_DATA *FCD);
-	void(*FindFilesW)(FILESYSTEM *FS, const wchar_t* DirName, FIND_CALLBACK_DATA *FCD);
+	NTSTATUS(*FindFilesA)(FILESYSTEM *FS, const char* DirName, FIND_CALLBACK_DATA *FCD);
+	NTSTATUS(*FindFilesW)(FILESYSTEM *FS, const wchar_t* DirName, FIND_CALLBACK_DATA *FCD);
 } FSFORMAT;
 
 #define NEW_FSFORMAT(ID, _FNLength, CharSet) \
