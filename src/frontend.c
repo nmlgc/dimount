@@ -39,6 +39,19 @@ int ReportError(int ReturnValue, DWORD Error, const wchar_t *Prefix, ...)
 	FILESYSTEM *fs = (FILESYSTEM*)DokanFileInfo->DokanOptions->GlobalContext; \
 	const FSFORMAT *fmt = fs->FSFormat;
 
+#define DIMCodePageCall(Func, ...) \
+	bool unicode = fmt->Func##W != NULL; \
+	char filename_a[MAX_PATH]; \
+	int ret; \
+	if(unicode) { \
+		ret = fmt->Func##W(fs, FileNameW, __VA_ARGS__); \
+	} else { \
+		WideCharToMultiByte( \
+			fs->CodePage, 0, FileNameW, -1, filename_a, sizeof(filename_a), NULL, NULL \
+		); \
+		ret = fmt->Func##A(fs, filename_a, __VA_ARGS__); \
+	}
+
 static NTSTATUS DOKAN_CALLBACK DIMCreateFile(
 	LPCWSTR FileName,
 	DWORD AccessMode,
@@ -74,21 +87,12 @@ static NTSTATUS DOKAN_CALLBACK DIMFindFiles(
 	PrintEnter;
 	fwprintf(stderr, L"(%s)\n", FileNameW);
 #endif
-	bool unicode = fmt->FindFilesW != NULL;
-	char filename_a[MAX_PATH];
 	FIND_CALLBACK_DATA fcd;
 	fcd.FS = fs;
 	fcd.FillFindData = FillFindData;
 	fcd.DokanFileInfo = DokanFileInfo;
-	if(unicode) {
-		fmt->FindFilesW(fs, FileNameW, &fcd);
-	} else {
-		WideCharToMultiByte(
-			fs->CodePage, 0, FileNameW, -1, filename_a, sizeof(filename_a), NULL, NULL
-		);
-		fmt->FindFilesA(fs, filename_a, &fcd);
-	}
-	return STATUS_SUCCESS;
+	DIMCodePageCall(FindFiles, &fcd);
+	return ret;
 }
 
 static NTSTATUS DOKAN_CALLBACK DIMGetDiskFreeSpace(
