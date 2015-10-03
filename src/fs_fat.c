@@ -199,18 +199,22 @@ typedef struct {
 	uint32_t Limit;
 } FAT_DIR_ITERATOR;
 
-static void FAT_DirIterateInit(FILESYSTEM *FS, FAT_DIR_ITERATOR *Iter, fat_cluster_t Cluster)
+static void FAT_DirIterateInit(FILESYSTEM *FS, FAT_DIR_ITERATOR *Iter, FAT_DIR_ENTRY *DPointer)
 {
 	FBR_GET_ASSERT;
 	FAT_INFO_GET;
 	assert(Iter);
-	Iter->Cluster = Cluster;
+	if(!DPointer) {
+		Iter->Base = NULL;
+		return;
+	}
+	Iter->Cluster = DPointer->FirstCluster;
 	Iter->Index = 0;
-	if(Cluster == 0) {
+	if(Iter->Cluster == 0) {
 		Iter->Base = fat_info->RootDir;
 		Iter->Limit = fbr->RootDirEntries;
 	} else {
-		Iter->Base = (FAT_DIR_ENTRY*)FAT_AtCluster(fat_info, Cluster);
+		Iter->Base = (FAT_DIR_ENTRY*)FAT_AtCluster(fat_info, Iter->Cluster);
 		Iter->Limit = (fat_info->ClusterSize) / sizeof(FAT_DIR_ENTRY);
 	}
 }
@@ -381,16 +385,23 @@ void FS_FAT_DiskSizes(FILESYSTEM *FS, uint64_t *Total, uint64_t *Available)
 	}
 }
 
-static fat_cluster_t FAT_FileLookup(FILESYSTEM *FS, const char *FileName, fat_cluster_t Cluster)
+static FAT_DIR_ENTRY* FAT_FileLookup(FILESYSTEM *FS, const char *FileName, FAT_DIR_ENTRY *DStart)
 {
+	// By creating a fake dentry pointing to the root directory,
+	// we can always return a FAT_DIR_ENTRY from this function.
+	static FAT_DIR_ENTRY fakeroot = {.FirstCluster = 0};
+
 	assert(FS);
 	assert(FileName);
 	assert(IsDirSep(FileName[0]));
 	char fat_name[8 + 3];
 	FAT_DIR_ITERATOR iter;
 
+	if(DStart == NULL) {
+		DStart = &fakeroot;
+	}
 	if(FileName[1] == '\0' || FileName[0] == '\0') {
-		return 0;
+		return DStart;
 	}
 	FileName++;
 	size_t fn_len = 0;
@@ -400,7 +411,7 @@ static fat_cluster_t FAT_FileLookup(FILESYSTEM *FS, const char *FileName, fat_cl
 	FAT_ToShortName(fat_name, FileName, fn_len);
 	bool directory_expected = IsDirSep(FileName[fn_len]);
 
-	FAT_DirIterateInit(FS, &iter, Cluster);
+	FAT_DirIterateInit(FS, &iter, DStart);
 	FAT_DIR_ENTRY *dentry;
 	while(dentry = FAT_DirIterate(FS, &iter)) {
 		if(dentry->BaseName[0] == '\0') {
@@ -409,23 +420,21 @@ static fat_cluster_t FAT_FileLookup(FILESYSTEM *FS, const char *FileName, fat_cl
 		if(!_strnicmp(dentry->BaseName, fat_name, sizeof(fat_name))) {
 			if(directory_expected) {
 				if(dentry->Attribute & FILE_ATTRIBUTE_DIRECTORY) {
-					return FAT_FileLookup(
-						FS, FileName + fn_len, dentry->FirstCluster
-					);
+					return FAT_FileLookup(FS, FileName + fn_len, dentry);
 				}
 				break;
 			}
-			return dentry->FirstCluster;
+			return dentry;
 		}
 	}
-	return -1;
+	return NULL;
 }
 
 NTSTATUS FS_FAT_FindFilesA(FILESYSTEM *FS, const char* DirName, FIND_CALLBACK_DATA *FCD)
 {
 	FAT_DIR_ITERATOR iter;
-	FAT_DIR_ENTRY *dentry;
-	FAT_DirIterateInit(FS, &iter, FAT_FileLookup(FS, DirName, 0));
+	FAT_DIR_ENTRY *dentry = FAT_FileLookup(FS, DirName, NULL);
+	FAT_DirIterateInit(FS, &iter, dentry);
 	while(dentry = FAT_DirIterate(FS, &iter)) {
 		WIN32_FIND_DATAA fd;
 		unsigned char first = dentry->BaseName[0];
