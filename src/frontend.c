@@ -42,7 +42,7 @@ int ReportError(int ReturnValue, DWORD Error, const wchar_t *Prefix, ...)
 #define DIMCodePageCall(Func, ...) \
 	bool unicode = fmt->Func##W != NULL; \
 	char filename_a[MAX_PATH]; \
-	int ret; \
+	ULONG64 ret; \
 	if(unicode) { \
 		ret = fmt->Func##W(fs, FileNameW, __VA_ARGS__); \
 	} else { \
@@ -51,6 +51,16 @@ int ReportError(int ReturnValue, DWORD Error, const wchar_t *Prefix, ...)
 		); \
 		ret = fmt->Func##A(fs, filename_a, __VA_ARGS__); \
 	}
+
+static ULONG64 DOKAN_CALLBACK DIMFileLookup(
+	LPCWSTR FileNameW,
+	PDOKAN_FILE_INFO DokanFileInfo
+)
+{
+	DIMCallbackEnter;
+	DIMCodePageCall(FileLookup);
+	return ret;
+}
 
 static NTSTATUS DOKAN_CALLBACK DIMCreateFile(
 	LPCWSTR FileName,
@@ -91,8 +101,7 @@ static NTSTATUS DOKAN_CALLBACK DIMFindFiles(
 	fcd.FS = fs;
 	fcd.FillFindData = FillFindData;
 	fcd.DokanFileInfo = DokanFileInfo;
-	DIMCodePageCall(FindFiles, &fcd);
-	return ret;
+	return fmt->FindFiles(fs, DIMFileLookup(FileNameW, DokanFileInfo), &fcd);
 }
 
 static NTSTATUS DOKAN_CALLBACK DIMGetDiskFreeSpace(

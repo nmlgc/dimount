@@ -44,9 +44,12 @@ typedef struct FSFORMAT {
 	int(*Probe)(FILESYSTEM *FS);
 	// Returns [Total] and [Available] number of bytes on the file system.
 	void(*DiskSizes)(FILESYSTEM *FS, uint64_t *Total, uint64_t *Available);
+	// Returns a pointer to the directory entry structure of [FileName], or NULL
+	// if the file does not exist.
+	ULONG64(*FileLookupA)(FILESYSTEM *FS, const char *FileName);
+	ULONG64(*FileLookupW)(FILESYSTEM *FS, const wchar_t *FileName);
 	// Calls FindAddFileA()/FindAddFileW() for every file in [DirName].
-	NTSTATUS(*FindFilesA)(FILESYSTEM *FS, const char* DirName, FIND_CALLBACK_DATA *FCD);
-	NTSTATUS(*FindFilesW)(FILESYSTEM *FS, const wchar_t* DirName, FIND_CALLBACK_DATA *FCD);
+	NTSTATUS(*FindFiles)(FILESYSTEM *FS, ULONG64 Dir, FIND_CALLBACK_DATA *FCD);
 } FSFORMAT;
 
 #define NEW_FSFORMAT(ID, _FNLength, CharSet) \
@@ -55,7 +58,8 @@ typedef struct FSFORMAT {
 		.FNLength = _FNLength, \
 		.Probe = FS_##ID##_Probe, \
 		.DiskSizes = FS_##ID##_DiskSizes, \
-		.FindFiles##CharSet = FS_##ID##_FindFiles##CharSet, \
+		.FileLookup##CharSet = FS_##ID##_FileLookup##CharSet, \
+		.FindFiles = FS_##ID##_FindFiles, \
 	}
 
 typedef struct PTFORMAT {

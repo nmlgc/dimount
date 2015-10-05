@@ -430,10 +430,15 @@ static FAT_DIR_ENTRY* FAT_FileLookup(FILESYSTEM *FS, const char *FileName, FAT_D
 	return NULL;
 }
 
-NTSTATUS FS_FAT_FindFilesA(FILESYSTEM *FS, const char* DirName, FIND_CALLBACK_DATA *FCD)
+ULONG64 FS_FAT_FileLookupA(FILESYSTEM *FS, const char *FileName)
+{
+	return (ULONG64)FAT_FileLookup(FS, FileName, NULL);
+}
+
+NTSTATUS FS_FAT_FindFiles(FILESYSTEM *FS, ULONG64 Dir, FIND_CALLBACK_DATA *FCD)
 {
 	FAT_DIR_ITERATOR iter;
-	FAT_DIR_ENTRY *dentry = FAT_FileLookup(FS, DirName, NULL);
+	FAT_DIR_ENTRY *dentry = (FAT_DIR_ENTRY*)Dir;
 	FAT_DirIterateInit(FS, &iter, dentry);
 	while(dentry = FAT_DirIterate(FS, &iter)) {
 		WIN32_FIND_DATAA fd;
