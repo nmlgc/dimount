@@ -63,7 +63,7 @@ static ULONG64 DOKAN_CALLBACK DIMFileLookup(
 }
 
 static NTSTATUS DOKAN_CALLBACK DIMCreateFile(
-	LPCWSTR FileName,
+	LPCWSTR FileNameW,
 	DWORD AccessMode,
 	DWORD ShareMode,
 	DWORD CreationDisposition,
@@ -71,6 +71,7 @@ static NTSTATUS DOKAN_CALLBACK DIMCreateFile(
 	PDOKAN_FILE_INFO DokanFileInfo
 )
 {
+	DIMCallbackEnter;
 #ifdef _DEBUG
 	PrintEnter;
 	const wchar_t *DISPOSITION =
@@ -81,9 +82,21 @@ static NTSTATUS DOKAN_CALLBACK DIMCreateFile(
 		: CreationDisposition == TRUNCATE_EXISTING ? L"TRUNCATE_EXISTING"
 		: L"???"
 	;
-	fwprintf(stderr, L"(%s, %s)\n", FileName, DISPOSITION);
+	fwprintf(stderr, L"(%s, %s)\n", FileNameW, DISPOSITION);
 #endif
-	return STATUS_SUCCESS;
+	// TODO: Implement ShareMode in the frontend.
+	if(
+		CreationDisposition == CREATE_NEW
+		|| CreationDisposition == CREATE_ALWAYS
+		|| CreationDisposition == TRUNCATE_EXISTING
+	) {
+		fwprintf(stderr, L"(write access not implemented yet)");
+		return -ERROR_ACCESS_DENIED;
+	}
+	HANDLE handle = DokanOpenRequestorToken(DokanFileInfo);
+	CloseHandle(handle);
+	DIMCodePageCall(CreateFile, AccessMode, CreationDisposition, FlagsAndAttributes, DokanFileInfo);
+	return (NTSTATUS)ret;
 }
 
 static NTSTATUS DOKAN_CALLBACK DIMFindFiles(
@@ -139,6 +152,7 @@ static NTSTATUS DOKAN_CALLBACK DIMGetVolumeInformation(
 	wcscpy_s(VolumeNameBuffer, VolumeNameSize, fs->Label);
 	*VolumeSerialNumber = fs->Serial;
 	*MaximumComponentLength = fmt->FNLength;
+	*FileSystemFlags = FILE_READ_ONLY_VOLUME;
 	wcscpy_s(FileSystemNameBuffer, FileSystemNameSize, fmt->Name(fs));
 	return STATUS_SUCCESS;
 }

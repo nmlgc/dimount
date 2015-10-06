@@ -50,6 +50,8 @@ typedef struct FSFORMAT {
 	ULONG64(*FileLookupW)(FILESYSTEM *FS, const wchar_t *FileName);
 	// Calls FindAddFileA()/FindAddFileW() for every file in [DirName].
 	NTSTATUS(*FindFiles)(FILESYSTEM *FS, ULONG64 Dir, FIND_CALLBACK_DATA *FCD);
+	NTSTATUS(*CreateFileA)(FILESYSTEM *FS, const char *FileName, DWORD AccessMode, DWORD CreationDisposition, DWORD FlagsAndAttributes, PDOKAN_FILE_INFO DokanFileInfo);
+	NTSTATUS(*CreateFileW)(FILESYSTEM *FS, const wchar_t *FileName, DWORD AccessMode, DWORD CreationDisposition, DWORD FlagsAndAttributes, PDOKAN_FILE_INFO DokanFileInfo);
 } FSFORMAT;
 
 #define NEW_FSFORMAT(ID, _FNLength, CharSet) \
@@ -60,6 +62,7 @@ typedef struct FSFORMAT {
 		.DiskSizes = FS_##ID##_DiskSizes, \
 		.FileLookup##CharSet = FS_##ID##_FileLookup##CharSet, \
 		.FindFiles = FS_##ID##_FindFiles, \
+		.CreateFile##CharSet = FS_##ID##_CreateFile##CharSet, \
 	}
 
 typedef struct PTFORMAT {

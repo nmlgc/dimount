@@ -472,4 +472,15 @@ NTSTATUS FS_FAT_FindFiles(FILESYSTEM *FS, ULONG64 Dir, FIND_CALLBACK_DATA *FCD)
 	return STATUS_SUCCESS;
 }
 
+NTSTATUS FS_FAT_CreateFileA(FILESYSTEM *FS, LPCSTR FileName, DWORD AccessMode, DWORD CreationDisposition, DWORD FlagsAndAttributes, PDOKAN_FILE_INFO DokanFileInfo)
+{
+	FAT_DIR_ENTRY *dentry = FAT_FileLookup(FS, FileName, NULL);
+	if(dentry == NULL) {
+		return -ERROR_FILE_NOT_FOUND;
+	}
+	DokanFileInfo->IsDirectory = (dentry->Attribute & FILE_ATTRIBUTE_DIRECTORY) != 0;
+	DokanFileInfo->Context = (ULONG64)dentry;
+	return STATUS_SUCCESS;
+}
+
 NEW_FSFORMAT(FAT, 12, A);
