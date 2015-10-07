@@ -113,7 +113,7 @@ typedef struct {
 	(Obj)->ftLastWriteTime = timestamp; \
 	(Obj)->dwFileAttributes = dentry->Attribute;
 
-static uint8_t* FAT_AtCluster(FAT_INFO *FATInfo, fat_cluster_t Cluster)
+uint8_t* FAT_AtCluster(FAT_INFO *FATInfo, fat_cluster_t Cluster)
 {
 	Cluster -= 2;
 	if(Cluster < 2 || Cluster >= FATInfo->Clusters || Cluster == FATInfo->ClusterChainEnd) {
@@ -122,12 +122,12 @@ static uint8_t* FAT_AtCluster(FAT_INFO *FATInfo, fat_cluster_t Cluster)
 	return At(&FATInfo->Data, Cluster * FATInfo->ClusterSize, FATInfo->ClusterSize);
 }
 
-static int FAT_ValidMedia(uint8_t media)
+int FAT_ValidMedia(uint8_t media)
 {
 	return 0xf8 <= media || media == 0xf0;
 }
 
-static bool FAT_ToShortName(char *dst, const char *src, size_t src_len)
+bool FAT_ToShortName(char *dst, const char *src, size_t src_len)
 {
 	assert(dst);
 	assert(src);
@@ -155,7 +155,7 @@ static bool FAT_ToShortName(char *dst, const char *src, size_t src_len)
 	return true;
 }
 
-static size_t FAT_NameComponentCopy(char *dst, const char *src, size_t len)
+size_t FAT_NameComponentCopy(char *dst, const char *src, size_t len)
 {
 	assert(dst);
 	assert(src);
@@ -212,7 +212,7 @@ typedef struct {
 	uint32_t Limit;
 } FAT_DIR_ITERATOR;
 
-static void FAT_DirIterateInit(FILESYSTEM *FS, FAT_DIR_ITERATOR *Iter, FAT_DIR_ENTRY *DPointer)
+void FAT_DirIterateInit(FILESYSTEM *FS, FAT_DIR_ITERATOR *Iter, FAT_DIR_ENTRY *DPointer)
 {
 	FBR_GET_ASSERT;
 	FAT_INFO_GET;
@@ -232,7 +232,7 @@ static void FAT_DirIterateInit(FILESYSTEM *FS, FAT_DIR_ITERATOR *Iter, FAT_DIR_E
 	}
 }
 
-static FAT_DIR_ENTRY* FAT_DirIterate(FILESYSTEM *FS, FAT_DIR_ITERATOR *Iter)
+FAT_DIR_ENTRY* FAT_DirIterate(FILESYSTEM *FS, FAT_DIR_ITERATOR *Iter)
 {
 	FAT_INFO_GET;
 	assert(Iter);
@@ -274,7 +274,7 @@ const wchar_t* FS_FAT_Name(FILESYSTEM *FS)
 	}
 }
 
-static FAT_TYPE FAT_TypeFromField(const char *Type)
+FAT_TYPE FAT_TypeFromField(const char *Type)
 {
 	if(!memcmp(Type, "FAT12   ", 8)) {
 		return FAT12;
@@ -286,7 +286,7 @@ static FAT_TYPE FAT_TypeFromField(const char *Type)
 	return FAT_UNKNOWN;
 }
 
-static FAT_TYPE FAT_TypeFromClusterCount(fat_cluster_t Count)
+FAT_TYPE FAT_TypeFromClusterCount(fat_cluster_t Count)
 {
 	for(FAT_TYPE i = FAT12; i <= FAT32; i++) {
 		if(Count >= FAT_CLUSTERS_MIN[i] && Count <= FAT_CLUSTERS_MAX[i]) {
@@ -398,7 +398,7 @@ void FS_FAT_DiskSizes(FILESYSTEM *FS, uint64_t *Total, uint64_t *Available)
 	}
 }
 
-static FAT_DIR_ENTRY* FAT_FileLookup(FILESYSTEM *FS, const char *FileName, FAT_DIR_ENTRY *DStart)
+FAT_DIR_ENTRY* FAT_FileLookup(FILESYSTEM *FS, const char *FileName, FAT_DIR_ENTRY *DStart)
 {
 	// By creating a fake dentry pointing to the root directory,
 	// we can always return a FAT_DIR_ENTRY from this function.

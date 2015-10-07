@@ -59,7 +59,7 @@ int ReportError(int ReturnValue, DWORD Error, const wchar_t *Prefix, ...)
 #define DIMFileShouldBeOpen \
 	assert(DokanFileInfo->Context);
 
-static ULONG64 DOKAN_CALLBACK DIMFileLookup(
+ULONG64 DOKAN_CALLBACK DIMFileLookup(
 	LPCWSTR FileNameW,
 	PDOKAN_FILE_INFO DokanFileInfo
 )
@@ -69,7 +69,7 @@ static ULONG64 DOKAN_CALLBACK DIMFileLookup(
 	return ret;
 }
 
-static NTSTATUS DOKAN_CALLBACK DIMCreateFile(
+NTSTATUS DOKAN_CALLBACK DIMCreateFile(
 	LPCWSTR FileNameW,
 	DWORD AccessMode,
 	DWORD ShareMode,
@@ -106,7 +106,7 @@ static NTSTATUS DOKAN_CALLBACK DIMCreateFile(
 	return (NTSTATUS)ret;
 }
 
-static NTSTATUS DOKAN_CALLBACK DIMFindFiles(
+NTSTATUS DOKAN_CALLBACK DIMFindFiles(
 	LPCWSTR FileNameW,
 	PFillFindData FillFindData,
 	PDOKAN_FILE_INFO DokanFileInfo
@@ -124,7 +124,7 @@ static NTSTATUS DOKAN_CALLBACK DIMFindFiles(
 	return fmt->FindFiles(fs, DIMFileLookup(FileNameW, DokanFileInfo), &fcd);
 }
 
-static NTSTATUS DOKAN_CALLBACK DIMGetDiskFreeSpace(
+NTSTATUS DOKAN_CALLBACK DIMGetDiskFreeSpace(
 	PULONGLONG FreeBytesAvailable,
 	PULONGLONG TotalNumberOfBytes,
 	PULONGLONG TotalNumberOfFreeBytes,
@@ -140,7 +140,7 @@ static NTSTATUS DOKAN_CALLBACK DIMGetDiskFreeSpace(
 	return STATUS_SUCCESS;
 }
 
-static NTSTATUS DOKAN_CALLBACK DIMGetFileInformation(
+NTSTATUS DOKAN_CALLBACK DIMGetFileInformation(
 	LPCWSTR FileName,
 	LPBY_HANDLE_FILE_INFORMATION HandleFileInfo,
 	PDOKAN_FILE_INFO DokanFileInfo
@@ -156,7 +156,7 @@ static NTSTATUS DOKAN_CALLBACK DIMGetFileInformation(
 	return fmt->GetFileInformation(fs, HandleFileInfo, DokanFileInfo);
 }
 
-static NTSTATUS DOKAN_CALLBACK DIMGetVolumeInformation(
+NTSTATUS DOKAN_CALLBACK DIMGetVolumeInformation(
 	LPWSTR VolumeNameBuffer,
 	DWORD VolumeNameSize,
 	LPDWORD VolumeSerialNumber,
@@ -180,7 +180,7 @@ static NTSTATUS DOKAN_CALLBACK DIMGetVolumeInformation(
 	return STATUS_SUCCESS;
 }
 
-static NTSTATUS DOKAN_CALLBACK DIMReadFile(
+NTSTATUS DOKAN_CALLBACK DIMReadFile(
 	LPCWSTR FileName,
 	LPVOID Buffer,
 	DWORD BufferLength,
@@ -218,7 +218,7 @@ static NTSTATUS DOKAN_CALLBACK DIMReadFile(
 
 // This is the magical required function that makes everything else work in
 // Explorer.
-static NTSTATUS DOKAN_CALLBACK DIMOpenDirectory(
+NTSTATUS DOKAN_CALLBACK DIMOpenDirectory(
 	LPCWSTR FileName,
 	PDOKAN_FILE_INFO DokanFileInfo
 )

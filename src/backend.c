@@ -4,7 +4,7 @@
 
 /// Callbacks
 /// ---------
-static void CopyFindDataAToW(
+void CopyFindDataAToW(
 	UINT CodePage,
 	LPWIN32_FIND_DATAW fd_w,
 	LPWIN32_FIND_DATAA fd_a

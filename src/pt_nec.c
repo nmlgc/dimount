@@ -22,7 +22,7 @@ typedef struct {
 } PARTENTRY_98;
 #pragma pack(pop)
 
-static uint64_t SHCToBytes(SHC_8_8_16 *Pos, CHS *Sizes)
+uint64_t SHCToBytes(SHC_8_8_16 *Pos, CHS *Sizes)
 {
 	assert(Pos && Sizes);
 	return (uint64_t)(
