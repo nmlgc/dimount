@@ -180,6 +180,42 @@ static NTSTATUS DOKAN_CALLBACK DIMGetVolumeInformation(
 	return STATUS_SUCCESS;
 }
 
+static NTSTATUS DOKAN_CALLBACK DIMReadFile(
+	LPCWSTR FileName,
+	LPVOID Buffer,
+	DWORD BufferLength,
+	LPDWORD ReadLength,
+	LONGLONG Offset,
+	PDOKAN_FILE_INFO DokanFileInfo
+)
+{
+	DIMCallbackEnter;
+#ifdef _DEBUG
+	PrintEnter;
+	fwprintf(stderr, L"(%s, %u bytes from %I64u)\n", FileName, BufferLength, Offset);
+#endif
+	// Yes, normal ReadFile() crashes inside the kernel if [ReadLength] is NULL,
+	// but that doesn't mean we should depend on that or, worse, do the same!
+	if(!ReadLength) {
+		return STATUS_INVALID_PARAMETER;
+	}
+	*ReadLength = 0;
+	if(!Buffer) {
+		return BufferLength == 0 ? STATUS_SUCCESS : STATUS_ACCESS_VIOLATION;
+	} else if(BufferLength == 0) {
+		return STATUS_SUCCESS;
+	}
+	DIMFileShouldBeOpen;
+	LONGLONG size = fmt->FileSize((void*)DokanFileInfo->Context);
+	LONGLONG end = Offset + BufferLength;
+	if(Offset >= size) {
+		return STATUS_SUCCESS;
+	} else if(end > size || end < Offset) {
+		BufferLength = (DWORD)(size - Offset);
+	}
+	return fmt->ReadFile(fs, Buffer, BufferLength, ReadLength, Offset, DokanFileInfo);
+}
+
 // This is the magical required function that makes everything else work in
 // Explorer.
 static NTSTATUS DOKAN_CALLBACK DIMOpenDirectory(
@@ -201,6 +237,7 @@ DOKAN_OPERATIONS operations = {
 	.GetFileInformation = DIMGetFileInformation,
 	.GetVolumeInformation = DIMGetVolumeInformation,
 	.OpenDirectory = DIMOpenDirectory,
+	.ReadFile = DIMReadFile,
 };
 /// ---------------
 

@@ -53,6 +53,10 @@ typedef struct FSFORMAT {
 	NTSTATUS(*CreateFileA)(FILESYSTEM *FS, const char *FileName, DWORD AccessMode, DWORD CreationDisposition, DWORD FlagsAndAttributes, PDOKAN_FILE_INFO DokanFileInfo);
 	NTSTATUS(*CreateFileW)(FILESYSTEM *FS, const wchar_t *FileName, DWORD AccessMode, DWORD CreationDisposition, DWORD FlagsAndAttributes, PDOKAN_FILE_INFO DokanFileInfo);
 	NTSTATUS(*GetFileInformation)(FILESYSTEM *FS, LPBY_HANDLE_FILE_INFORMATION HandleFileInfo, PDOKAN_FILE_INFO DokanFileInfo);
+	NTSTATUS(*ReadFile)(FILESYSTEM *FS, uint8_t *Buffer, DWORD BufferLength, LPDWORD ReadLength, LONGLONG Offset, PDOKAN_FILE_INFO DokanFileInfo);
+
+	// Returns the file size member of the file system's directory entry structure.
+	LONGLONG(*FileSize)(const void *DEntry);
 } FSFORMAT;
 
 #define NEW_FSFORMAT(ID, _FNLength, CharSet) \
@@ -65,6 +69,8 @@ typedef struct FSFORMAT {
 		.FindFiles = FS_##ID##_FindFiles, \
 		.CreateFile##CharSet = FS_##ID##_CreateFile##CharSet, \
 		.GetFileInformation = FS_##ID##_GetFileInformation, \
+		.ReadFile = FS_##ID##_ReadFile, \
+		.FileSize = FS_##ID##_FileSize, \
 	}
 
 typedef struct PTFORMAT {

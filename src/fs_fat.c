@@ -500,4 +500,49 @@ NTSTATUS FS_FAT_GetFileInformation(FILESYSTEM *FS, LPBY_HANDLE_FILE_INFORMATION 
 	return STATUS_SUCCESS;
 }
 
+NTSTATUS FS_FAT_ReadFile(FILESYSTEM *FS, uint8_t *Buffer, DWORD BufferLength, LPDWORD ReadLength, LONGLONG Offset, PDOKAN_FILE_INFO DokanFileInfo)
+{
+	FAT_INFO_GET;
+	FAT_DIR_ENTRY *dentry = (FAT_DIR_ENTRY*)DokanFileInfo->Context;
+	fat_cluster_t cluster = dentry->FirstCluster;
+	while(Offset > fat_info->ClusterSize) {
+		if(cluster == fat_info->ClusterChainEnd || cluster < 2) {
+			return STATUS_DISK_CORRUPT_ERROR;
+		}
+		cluster = FAT_ClusterLookup(fat_info, cluster);
+		Offset -= fat_info->ClusterSize;
+	}
+	uint8_t *data = FAT_AtCluster(fat_info, cluster);
+	if(!data) {
+		return STATUS_DISK_CORRUPT_ERROR;
+	}
+	data += Offset;
+	DWORD remaining_in_cluster = fat_info->ClusterSize - (DWORD)Offset;
+	while(BufferLength) {
+		DWORD copy_length = min(remaining_in_cluster, BufferLength);
+		memcpy(Buffer, data, copy_length);
+		BufferLength -= copy_length;
+		Buffer += copy_length;
+		*ReadLength += copy_length;
+
+		if(BufferLength != 0) {
+			remaining_in_cluster = fat_info->ClusterSize;
+			if(cluster == fat_info->ClusterChainEnd || cluster < 2) {
+				return STATUS_DISK_CORRUPT_ERROR;
+			}
+			cluster = FAT_ClusterLookup(fat_info, cluster);
+			data = FAT_AtCluster(fat_info, cluster);
+			if(!data) {
+				return STATUS_DISK_CORRUPT_ERROR;
+			}
+		}
+	}
+	return STATUS_SUCCESS;
+}
+
+LONGLONG FS_FAT_FileSize(const void *DEntry)
+{
+	return ((FAT_DIR_ENTRY*)DEntry)->Size;
+}
+
 NEW_FSFORMAT(FAT, 12, A);
