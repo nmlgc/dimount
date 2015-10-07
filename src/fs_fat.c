@@ -100,6 +100,19 @@ typedef struct {
 	FBR_GET; \
 	assert(fbr);
 
+// Shared by FindFiles() and GetFileInformation(), and used for both
+// WIN32_FIND_DATA and BY_HANDLE_FILE_INFORMATION structures, which is why it
+// needs to be a macro.
+#define FAT_FILL_FILE_INFO(Obj) \
+	FILETIME timestamp; \
+	DosDateTimeToFileTime(dentry->Date, dentry->Time, &timestamp); \
+	(Obj)->nFileSizeHigh = 0; \
+	(Obj)->nFileSizeLow = dentry->Size; \
+	(Obj)->ftCreationTime = timestamp; \
+	(Obj)->ftLastAccessTime = timestamp; \
+	(Obj)->ftLastWriteTime = timestamp; \
+	(Obj)->dwFileAttributes = dentry->Attribute;
+
 static uint8_t* FAT_AtCluster(FAT_INFO *FATInfo, fat_cluster_t Cluster)
 {
 	Cluster -= 2;
@@ -458,14 +471,7 @@ NTSTATUS FS_FAT_FindFiles(FILESYSTEM *FS, ULONG64 Dir, FIND_CALLBACK_DATA *FCD)
 				fd.cFileName[name_len++] = '.';
 				memcpy(&fd.cFileName[name_len], ext, sizeof(ext));
 			}
-			FILETIME timestamp;
-			DosDateTimeToFileTime(dentry->Date, dentry->Time, &timestamp);
-			fd.nFileSizeHigh = 0;
-			fd.nFileSizeLow = dentry->Size;
-			fd.ftCreationTime = timestamp;
-			fd.ftLastAccessTime = timestamp;
-			fd.ftLastWriteTime = timestamp;
-			fd.dwFileAttributes = dentry->Attribute;
+			FAT_FILL_FILE_INFO(&fd);
 			FindAddFileA(FCD, &fd);
 		}
 	}
@@ -480,6 +486,17 @@ NTSTATUS FS_FAT_CreateFileA(FILESYSTEM *FS, LPCSTR FileName, DWORD AccessMode, D
 	}
 	DokanFileInfo->IsDirectory = (dentry->Attribute & FILE_ATTRIBUTE_DIRECTORY) != 0;
 	DokanFileInfo->Context = (ULONG64)dentry;
+	return STATUS_SUCCESS;
+}
+
+NTSTATUS FS_FAT_GetFileInformation(FILESYSTEM *FS, LPBY_HANDLE_FILE_INFORMATION HandleFileInfo, PDOKAN_FILE_INFO DokanFileInfo)
+{
+	FAT_DIR_ENTRY *dentry = (FAT_DIR_ENTRY*)DokanFileInfo->Context;
+	FAT_FILL_FILE_INFO(HandleFileInfo);
+	HandleFileInfo->nNumberOfLinks = 1;
+	// TODO: Will have to be changed for FAT32.
+	HandleFileInfo->nFileIndexHigh = 0;
+	HandleFileInfo->nFileIndexLow = dentry->FirstCluster;
 	return STATUS_SUCCESS;
 }
 

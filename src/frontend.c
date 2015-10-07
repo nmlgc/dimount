@@ -52,6 +52,13 @@ int ReportError(int ReturnValue, DWORD Error, const wchar_t *Prefix, ...)
 		ret = fmt->Func##A(fs, filename_a, __VA_ARGS__); \
 	}
 
+// TODO: Apparently, some functions that take the file name can be called
+// on an invalid handle?! The file system would then have to call CreateFile()
+// anyway, so we might as well do that in the frontend, avoiding the need for
+// separate A/W versions of those functions in the process.
+#define DIMFileShouldBeOpen \
+	assert(DokanFileInfo->Context);
+
 static ULONG64 DOKAN_CALLBACK DIMFileLookup(
 	LPCWSTR FileNameW,
 	PDOKAN_FILE_INFO DokanFileInfo
@@ -133,6 +140,22 @@ static NTSTATUS DOKAN_CALLBACK DIMGetDiskFreeSpace(
 	return STATUS_SUCCESS;
 }
 
+static NTSTATUS DOKAN_CALLBACK DIMGetFileInformation(
+	LPCWSTR FileName,
+	LPBY_HANDLE_FILE_INFORMATION HandleFileInfo,
+	PDOKAN_FILE_INFO DokanFileInfo
+)
+{
+	DIMCallbackEnter;
+#ifdef _DEBUG
+	PrintEnter;
+	fwprintf(stderr, L"(%s)\n", FileName);
+#endif
+	DIMFileShouldBeOpen;
+	HandleFileInfo->dwVolumeSerialNumber = fs->Serial;
+	return fmt->GetFileInformation(fs, HandleFileInfo, DokanFileInfo);
+}
+
 static NTSTATUS DOKAN_CALLBACK DIMGetVolumeInformation(
 	LPWSTR VolumeNameBuffer,
 	DWORD VolumeNameSize,
@@ -175,6 +198,7 @@ DOKAN_OPERATIONS operations = {
 	.CreateFile = DIMCreateFile,
 	.FindFiles = DIMFindFiles,
 	.GetDiskFreeSpace = DIMGetDiskFreeSpace,
+	.GetFileInformation = DIMGetFileInformation,
 	.GetVolumeInformation = DIMGetVolumeInformation,
 	.OpenDirectory = DIMOpenDirectory,
 };
