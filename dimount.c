@@ -14,6 +14,22 @@
 #include <stdio.h>
 #include <dokan.h>
 
+#define DOKAN_VERSION_REQUIRED 800
+#define DOKAN_VERSION_REQUIRED_STR "v0.8.0"
+
+#if DOKAN_VERSION < DOKAN_VERSION_REQUIRED
+# error dimount requires at least Dokan v0.8.0. Please install the latest release from https://github.com/dokan-dev/dokany.
+#elif DOKAN_VERSION > DOKAN_VERSION_REQUIRED
+# define _STR(x) #x
+# define STR(x) _STR(x)
+# pragma message(\
+	"warning: "\
+	"dimount was written for Dokan "DOKAN_VERSION_REQUIRED_STR" "\
+	"("STR(DOKAN_VERSION_REQUIRED)") and may not compile or run properly "\
+	"with version "STR(DOKAN_VERSION)"."\
+)
+#endif
+
 #include "src/backend.h"
 #include "src/utils.c"
 

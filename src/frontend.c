@@ -321,7 +321,7 @@ int dimount(const wchar_t *Mountpoint, const wchar_t *ImageFN)
 	}
 
 	DOKAN_OPTIONS options = {
-		.Version = DOKAN_VERSION,
+		.Version = DOKAN_VERSION_REQUIRED,
 		.ThreadCount = 0,
 		.MountPoint = Mountpoint,
 #ifdef _DEBUG
