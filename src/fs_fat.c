@@ -402,7 +402,10 @@ FAT_DIR_ENTRY* FAT_FileLookup(FILESYSTEM *FS, const char *FileName, FAT_DIR_ENTR
 {
 	// By creating a fake dentry pointing to the root directory,
 	// we can always return a FAT_DIR_ENTRY from this function.
-	static FAT_DIR_ENTRY fakeroot = {.FirstCluster = 0};
+	static FAT_DIR_ENTRY fakeroot = {
+		.FirstCluster = 0,
+		.Attribute = FILE_ATTRIBUTE_DIRECTORY
+	};
 
 	assert(FS);
 	assert(FileName);
