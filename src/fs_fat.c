@@ -127,15 +127,19 @@ int FAT_ValidMedia(uint8_t media)
 	return 0xf8 <= media || media == 0xf0;
 }
 
-bool FAT_ToShortName(char *dst, const char *src, size_t src_len)
+bool FAT_ToShortName(char *dst, const wchar_t *src_w, size_t src_len, UINT codepage)
 {
 	assert(dst);
-	assert(src);
+	assert(src_w);
+	char src_a[260];
+	WideCharToMultiByte(
+		codepage, 0, src_w, -1, src_a, sizeof(src_a), NULL, NULL
+	);
 	size_t base_len = 0;
-	while(src[base_len] != '.' && src[base_len] != '\0' && base_len < src_len) {
+	while(src_a[base_len] != '.' && src_a[base_len] != '\0' && base_len < src_len) {
 		base_len++;
 	}
-	const char *ext = src + base_len;
+	const char *ext = src_a + base_len;
 	size_t ext_len = src_len - base_len;
 	if(ext[0] == '.') {
 		ext++;
@@ -145,7 +149,7 @@ bool FAT_ToShortName(char *dst, const char *src, size_t src_len)
 		fwprintf(stderr, L"**Error** Long filenames not supported yet\n");
 		return false;
 	}
-	memcpy(dst, src, base_len);
+	memcpy(dst, src_a, base_len);
 	memset(dst + base_len, ' ', 8 - base_len);
 	memcpy(dst + 8, ext, ext_len);
 	memset(dst + 8 + ext_len, ' ', 3 - ext_len);
@@ -398,7 +402,7 @@ void FS_FAT_DiskSizes(FILESYSTEM *FS, uint64_t *Total, uint64_t *Available)
 	}
 }
 
-FAT_DIR_ENTRY* FAT_FileLookup(FILESYSTEM *FS, const char *FileName, FAT_DIR_ENTRY *DStart)
+FAT_DIR_ENTRY* FAT_FileLookup(FILESYSTEM *FS, const wchar_t *FileName, FAT_DIR_ENTRY *DStart)
 {
 	// By creating a fake dentry pointing to the root directory,
 	// we can always return a FAT_DIR_ENTRY from this function.
@@ -409,7 +413,7 @@ FAT_DIR_ENTRY* FAT_FileLookup(FILESYSTEM *FS, const char *FileName, FAT_DIR_ENTR
 
 	assert(FS);
 	assert(FileName);
-	assert(IsDirSep(FileName[0]));
+	assert(IsDirSepW(FileName[0]));
 	char fat_name[8 + 3];
 	FAT_DIR_ITERATOR iter;
 
@@ -421,11 +425,11 @@ FAT_DIR_ENTRY* FAT_FileLookup(FILESYSTEM *FS, const char *FileName, FAT_DIR_ENTR
 	}
 	FileName++;
 	size_t fn_len = 0;
-	while(FileName[fn_len] != '\0' && !IsDirSep(FileName[fn_len])) {
+	while(FileName[fn_len] != '\0' && !IsDirSepW(FileName[fn_len])) {
 		fn_len++;
 	}
-	FAT_ToShortName(fat_name, FileName, fn_len);
-	bool directory_expected = IsDirSep(FileName[fn_len]);
+	FAT_ToShortName(fat_name, FileName, fn_len, FS->CodePage);
+	bool directory_expected = IsDirSepW(FileName[fn_len]);
 
 	FAT_DirIterateInit(FS, &iter, DStart);
 	FAT_DIR_ENTRY *dentry;
@@ -446,7 +450,7 @@ FAT_DIR_ENTRY* FAT_FileLookup(FILESYSTEM *FS, const char *FileName, FAT_DIR_ENTR
 	return NULL;
 }
 
-ULONG64 FS_FAT_FileLookupA(FILESYSTEM *FS, const char *FileName)
+ULONG64 FS_FAT_FileLookupW(FILESYSTEM *FS, const wchar_t *FileName)
 {
 	return (ULONG64)FAT_FileLookup(FS, FileName, NULL);
 }
@@ -481,7 +485,7 @@ NTSTATUS FS_FAT_FindFiles(FILESYSTEM *FS, ULONG64 Dir, FIND_CALLBACK_DATA *FCD)
 	return STATUS_SUCCESS;
 }
 
-NTSTATUS FS_FAT_CreateFileA(FILESYSTEM *FS, LPCSTR FileName, DWORD AccessMode, DWORD CreationDisposition, DWORD FlagsAndAttributes, PDOKAN_FILE_INFO DokanFileInfo)
+NTSTATUS FS_FAT_CreateFileW(FILESYSTEM *FS, LPCWSTR FileName, DWORD AccessMode, DWORD CreationDisposition, DWORD FlagsAndAttributes, PDOKAN_FILE_INFO DokanFileInfo)
 {
 	FAT_DIR_ENTRY *dentry = FAT_FileLookup(FS, FileName, NULL);
 	if(dentry == NULL) {
@@ -548,4 +552,4 @@ LONGLONG FS_FAT_FileSize(const void *DEntry)
 	return ((FAT_DIR_ENTRY*)DEntry)->Size;
 }
 
-NEW_FSFORMAT(FAT, 12, A);
+NEW_FSFORMAT(FAT, 12, W);

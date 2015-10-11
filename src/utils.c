@@ -16,7 +16,12 @@ size_t TrimmedLength(const char *str, size_t len)
 	return len;
 }
 
-bool IsDirSep(const char c)
+bool IsDirSepA(const char c)
 {
 	return c == '/' || c == '\\';
+}
+
+bool IsDirSepW(const wchar_t c)
+{
+	return c == L'/' || c == L'\\';
 }
