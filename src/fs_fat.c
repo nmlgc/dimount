@@ -73,7 +73,20 @@ typedef struct {
 	uint16_t FirstCluster;
 	uint32_t Size;
 } FAT_DIR_ENTRY;
+
+typedef struct {
+	uint8_t Segment;
+	wchar_t Name1[5];
+	uint8_t Attribute;
+	uint8_t Type;
+	uint8_t Checksum;
+	wchar_t Name2[6];
+	uint16_t FirstCluster; // always 0
+	wchar_t Name3[2];
+} FAT_LFN_ENTRY;
 #pragma pack(pop)
+
+#define FILE_ATTRIBUTE_VOLUME_LABEL 0x08
 
 typedef fat_cluster_t FAT_Lookup_t(void *fat, fat_cluster_t Num);
 
@@ -127,6 +140,19 @@ int FAT_ValidMedia(uint8_t media)
 	return 0xf8 <= media || media == 0xf0;
 }
 
+bool FAT_ValidLFNEntry(FAT_LFN_ENTRY *Entry)
+{
+	assert(Entry);
+	const uint8_t LFN_ATTRIB = FILE_ATTRIBUTE_VOLUME_LABEL
+		| FILE_ATTRIBUTE_SYSTEM
+		| FILE_ATTRIBUTE_HIDDEN
+		| FILE_ATTRIBUTE_READONLY;
+	return Entry->Attribute == LFN_ATTRIB
+		&& (Entry->Segment & 0x20) == 0
+		&& Entry->Type == 0
+		&& Entry->FirstCluster == 0;
+}
+
 bool FAT_ToShortName(char *dst, const wchar_t *src_w, size_t src_len, UINT codepage)
 {
 	assert(dst);
@@ -146,7 +172,7 @@ bool FAT_ToShortName(char *dst, const wchar_t *src_w, size_t src_len, UINT codep
 		ext_len--;
 	}
 	if(base_len > 8 || ext_len > 3) {
-		fwprintf(stderr, L"**Error** Long filenames not supported yet\n");
+		dst[0] = 0;
 		return false;
 	}
 	memcpy(dst, src_a, base_len);
@@ -402,6 +428,20 @@ void FS_FAT_DiskSizes(FILESYSTEM *FS, uint64_t *Total, uint64_t *Available)
 	}
 }
 
+FAT_DIR_ENTRY* FAT_FileLookupRecurse(FILESYSTEM *FS, const wchar_t *NestName, FAT_DIR_ENTRY *DEntry)
+{
+	FAT_DIR_ENTRY* FAT_FileLookup(FILESYSTEM *FS, const wchar_t *FileName, FAT_DIR_ENTRY *DStart);
+
+	assert(NestName);
+	if(IsDirSepW(NestName[0])) {
+		if(DEntry->Attribute & FILE_ATTRIBUTE_DIRECTORY) {
+			return FAT_FileLookup(FS, NestName, DEntry);
+		}
+		return NULL;
+	}
+	return DEntry;
+}
+
 FAT_DIR_ENTRY* FAT_FileLookup(FILESYSTEM *FS, const wchar_t *FileName, FAT_DIR_ENTRY *DStart)
 {
 	// By creating a fake dentry pointing to the root directory,
@@ -415,6 +455,8 @@ FAT_DIR_ENTRY* FAT_FileLookup(FILESYSTEM *FS, const wchar_t *FileName, FAT_DIR_E
 	assert(FileName);
 	assert(IsDirSepW(FileName[0]));
 	char fat_name[8 + 3];
+	uint8_t lfn_segments = 0;
+	uint8_t lfn_segments_correct = 0;
 	FAT_DIR_ITERATOR iter;
 
 	if(DStart == NULL) {
@@ -428,8 +470,10 @@ FAT_DIR_ENTRY* FAT_FileLookup(FILESYSTEM *FS, const wchar_t *FileName, FAT_DIR_E
 	while(FileName[fn_len] != '\0' && !IsDirSepW(FileName[fn_len])) {
 		fn_len++;
 	}
-	FAT_ToShortName(fat_name, FileName, fn_len, FS->CodePage);
-	bool directory_expected = IsDirSepW(FileName[fn_len]);
+	bool sfn = FAT_ToShortName(fat_name, FileName, fn_len, FS->CodePage);
+	if(!sfn) {
+		lfn_segments = (uint8_t)((fn_len + 12) / 13);
+	}
 
 	FAT_DirIterateInit(FS, &iter, DStart);
 	FAT_DIR_ENTRY *dentry;
@@ -437,14 +481,31 @@ FAT_DIR_ENTRY* FAT_FileLookup(FILESYSTEM *FS, const wchar_t *FileName, FAT_DIR_E
 		if(dentry->BaseName[0] == '\0') {
 			break;
 		}
-		if(!_strnicmp(dentry->BaseName, fat_name, sizeof(fat_name))) {
-			if(directory_expected) {
-				if(dentry->Attribute & FILE_ATTRIBUTE_DIRECTORY) {
-					return FAT_FileLookup(FS, FileName + fn_len, dentry);
-				}
-				break;
+		if(sfn && !_strnicmp(dentry->BaseName, fat_name, sizeof(fat_name))) {
+			return FAT_FileLookupRecurse(FS, FileName + fn_len, dentry);
+		} else if(!sfn) {
+			FAT_LFN_ENTRY *lfn_entry = (FAT_LFN_ENTRY*)dentry;
+			if(lfn_segments == lfn_segments_correct) {
+				return FAT_FileLookupRecurse(FS, FileName + fn_len, dentry);
 			}
-			return dentry;
+			uint8_t segment_local = lfn_entry->Segment & 0x1F;
+			const wchar_t *sgm_lookup = FileName + ((segment_local - 1) * 13);
+			if(FAT_ValidLFNEntry(lfn_entry)) {
+				if((segment_local <= lfn_segments) && (lfn_segments_correct != 0xFF)) {
+					wchar_t sgm_cur[14];
+					memcpy(sgm_cur + 0, lfn_entry->Name1, sizeof(lfn_entry->Name1));
+					memcpy(sgm_cur + 5, lfn_entry->Name2, sizeof(lfn_entry->Name2));
+					memcpy(sgm_cur + 11, lfn_entry->Name3, sizeof(lfn_entry->Name3));
+					sgm_cur[13] = L'\0';
+					if(!_wcsnicmp(sgm_cur, sgm_lookup, wcslen(sgm_cur))) {
+						lfn_segments_correct++;
+					} else {
+						lfn_segments_correct = 0xFF;
+					}
+				}
+			} else {
+				lfn_segments_correct = 0;
+			}
 		}
 	}
 	return NULL;
@@ -460,26 +521,70 @@ NTSTATUS FS_FAT_FindFiles(FILESYSTEM *FS, ULONG64 Dir, FIND_CALLBACK_DATA *FCD)
 	FAT_DIR_ITERATOR iter;
 	FAT_DIR_ENTRY *dentry = (FAT_DIR_ENTRY*)Dir;
 	FAT_DirIterateInit(FS, &iter, dentry);
+	// Both of these are 1-based!
+	uint8_t lfn_length = 0;
+	uint8_t lfn_segment = 0;
+
 	while(dentry = FAT_DirIterate(FS, &iter)) {
-		WIN32_FIND_DATAA fd;
+		WIN32_FIND_DATAA fd_a;
+		WIN32_FIND_DATAW fd_w;
+		FAT_LFN_ENTRY *lfn_entry = (FAT_LFN_ENTRY*)dentry;
 		unsigned char first = dentry->BaseName[0];
 		if(first == 0x00) {
 			break;
-		} else if(first != 0xE5 && (dentry->Attribute & 0x08) == 0) {
+		} else if(FAT_ValidLFNEntry(lfn_entry)) {
+			if(lfn_length == 0 && (lfn_entry->Segment & 0x40)) {
+				ZeroMemory(fd_w.cFileName, sizeof(fd_w.cFileName));
+				lfn_length = lfn_entry->Segment & 0x1F;
+				lfn_segment = lfn_length;
+				if(lfn_length > 20) {
+					fwprintf(stderr, L"**Warning** ignoring filename longer than 260 characters\n");
+					lfn_length = 0;
+				}
+			}
+			if(lfn_length >= 1 && lfn_length <= 20) {
+				uint8_t segment_local = lfn_entry->Segment & 0x1F;
+				if(segment_local != lfn_segment) {
+					fwprintf(stderr,
+						L"**Warning** malformed long file name; expected segment #%d, not %d\n",
+						lfn_segment, segment_local
+					);
+				}
+				if(segment_local <= 20) {
+					wchar_t *sgm_dst = fd_w.cFileName + ((segment_local - 1) * 13);
+					memcpy(sgm_dst + 0, lfn_entry->Name1, sizeof(lfn_entry->Name1));
+					memcpy(sgm_dst + 5, lfn_entry->Name2, sizeof(lfn_entry->Name2));
+					memcpy(sgm_dst + 11, lfn_entry->Name3, sizeof(lfn_entry->Name3));
+					if(segment_local == 20) {
+						sgm_dst[12] = L'\0';
+					}
+				}
+				lfn_segment--;
+			}
+		} else if(first != 0xE5 && (dentry->Attribute & FILE_ATTRIBUTE_VOLUME_LABEL) == 0) {
 			char ext[sizeof(dentry->Extension) + 1] = {0};
 			FAT_NameComponentCopy(ext, dentry->Extension, sizeof(dentry->Extension));
 			size_t name_len = FAT_NameComponentCopy(
-				fd.cFileName, dentry->BaseName, sizeof(dentry->BaseName)
+				fd_a.cFileName, dentry->BaseName, sizeof(dentry->BaseName)
 			);
 			if(first == 0x05) {
-				fd.cFileName[0] = 0xE5;
+				fd_a.cFileName[0] = 0xE5;
 			}
 			if(ext[0] != '\0') {
-				fd.cFileName[name_len++] = '.';
-				memcpy(&fd.cFileName[name_len], ext, sizeof(ext));
+				fd_a.cFileName[name_len++] = '.';
+				memcpy(&fd_a.cFileName[name_len], ext, sizeof(ext));
 			}
-			FAT_FILL_FILE_INFO(&fd);
-			FindAddFileA(FCD, &fd);
+			if(lfn_length != 0) {
+				FAT_FILL_FILE_INFO(&fd_w);
+				MultiByteToWideChar(
+					FS->CodePage, 0, fd_a.cFileName, 14, fd_w.cAlternateFileName, sizeof(fd_w.cAlternateFileName)
+				);
+				FindAddFileW(FCD, &fd_w);
+				lfn_length = 0;
+			} else {
+				FAT_FILL_FILE_INFO(&fd_a);
+				FindAddFileA(FCD, &fd_a);
+			}
 		}
 	}
 	return STATUS_SUCCESS;
@@ -552,4 +657,4 @@ LONGLONG FS_FAT_FileSize(const void *DEntry)
 	return ((FAT_DIR_ENTRY*)DEntry)->Size;
 }
 
-NEW_FSFORMAT(FAT, 12, W);
+NEW_FSFORMAT(FAT, 260, W);
