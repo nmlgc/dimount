@@ -2,6 +2,54 @@
  * Dokan Image Mounter - Frontend
  */
 
+/// Dynamic loading of Dokan
+/// ------------------------
+#define DOKAN_GET_PROC_ADDRESS(Func) \
+	(p##Func = (Func##_t*)GetProcAddress(hDokan, #Func))
+
+HMODULE hDokan;
+typedef int __stdcall DokanMain_t(PDOKAN_OPTIONS, PDOKAN_OPERATIONS);
+typedef HANDLE __stdcall DokanOpenRequestorToken_t(PDOKAN_FILE_INFO);
+DokanMain_t *pDokanMain;
+DokanOpenRequestorToken_t *pDokanOpenRequestorToken;
+
+bool DokanInit(void)
+{
+	const wchar_t *DLL = L"dokan.dll";
+	hDokan = LoadLibraryW(DLL);
+	if(hDokan) {
+		if(
+			DOKAN_GET_PROC_ADDRESS(DokanMain)
+			&& DOKAN_GET_PROC_ADDRESS(DokanOpenRequestorToken)
+		) {
+			return true;
+		} else {
+			fwprintf(stderr,
+				L"**Error** Could not retrieve the required functions from %s.\n", DLL
+			);
+	} else {
+		fwprintf(stderr, L"**Error** Could not load %s.\n", DLL);
+	}
+	fwprintf(stderr,
+		L"dimount requires at least Dokan %s. Please install the latest release from\n"
+		L"\n"
+		L"\thttps://github.com/dokan-dev/dokany\n",
+		DOKAN_VERSION_REQUIRED_STR_W
+	);
+	return false;
+}
+
+void DokanExit(void)
+{
+	if(hDokan) {
+		FreeLibrary(hDokan);
+		hDokan = NULL;
+		pDokanMain = NULL;
+		pDokanOpenRequestorToken = NULL;
+	}
+}
+/// ------------------------
+
 /// Error reporting
 /// ---------------
 #define W32_ERR_REPORT(FailCondition, ReturnValue, Prefix, ...) \
@@ -100,7 +148,7 @@ NTSTATUS DOKAN_CALLBACK DIMCreateFile(
 		fwprintf(stderr, L"(write access not implemented yet)");
 		return -ERROR_ACCESS_DENIED;
 	}
-	HANDLE handle = DokanOpenRequestorToken(DokanFileInfo);
+	HANDLE handle = pDokanOpenRequestorToken(DokanFileInfo);
 	CloseHandle(handle);
 	DIMCodePageCall(CreateFile, AccessMode, CreationDisposition, FlagsAndAttributes, DokanFileInfo);
 	return (NTSTATUS)ret;
@@ -330,7 +378,7 @@ int dimount(const wchar_t *Mountpoint, const wchar_t *ImageFN)
 #endif
 		.GlobalContext = (ULONG64)fs_to_mount,
 	};
-	ret = DokanMain(&options, &operations);
+	ret = pDokanMain(&options, &operations);
 
 end:
 	UnmapViewOfFile(image.View.Memory);
@@ -341,9 +389,14 @@ end:
 
 int __cdecl wmain(ULONG argc, const wchar_t *argv[])
 {
+	int ret = -1;
 	if(argc < 3) {
 		fwprintf(stderr, L"Usage: %s mountpoint imagefile\n", argv[0]);
-		return -1;
+		return ret;
 	}
-	return dimount(argv[1], argv[2]);
+	if(DokanInit()) {
+		ret = dimount(argv[1], argv[2]);
+	}
+	DokanExit();
+	return ret;
 }

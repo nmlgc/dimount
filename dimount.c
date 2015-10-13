@@ -2,8 +2,6 @@
  * Dokan Image Mounter - Main compilation unit
  */
 
-#pragma comment(lib, "dokan.lib")
-
 #define WIN32_NO_STATUS
 #include <windows.h>
 #undef WIN32_NO_STATUS
@@ -16,6 +14,7 @@
 
 #define DOKAN_VERSION_REQUIRED 800
 #define DOKAN_VERSION_REQUIRED_STR "v0.8.0"
+#define DOKAN_VERSION_REQUIRED_STR_W L"v0.8.0"
 
 #if DOKAN_VERSION < DOKAN_VERSION_REQUIRED
 # error dimount requires at least Dokan v0.8.0. Please install the latest release from https://github.com/dokan-dev/dokany.
