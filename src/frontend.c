@@ -10,8 +10,10 @@
 HMODULE hDokan;
 typedef int __stdcall DokanMain_t(PDOKAN_OPTIONS, PDOKAN_OPERATIONS);
 typedef HANDLE __stdcall DokanOpenRequestorToken_t(PDOKAN_FILE_INFO);
+typedef ULONG __stdcall DokanVersion_t(void);
 DokanMain_t *pDokanMain;
 DokanOpenRequestorToken_t *pDokanOpenRequestorToken;
+DokanVersion_t *pDokanVersion;
 
 bool DokanInit(void)
 {
@@ -21,12 +23,24 @@ bool DokanInit(void)
 		if(
 			DOKAN_GET_PROC_ADDRESS(DokanMain)
 			&& DOKAN_GET_PROC_ADDRESS(DokanOpenRequestorToken)
+			&& DOKAN_GET_PROC_ADDRESS(DokanVersion)
 		) {
-			return true;
+			ULONG version = pDokanVersion();
+			if(version == DOKAN_VERSION_REQUIRED) {
+				return true;
+			} else if(version > DOKAN_VERSION_REQUIRED) {
+				fwprintf(stderr,
+					L"*Warning* dimount was compiled for Dokan %s (%u) and may not "\
+					L"work properly with version %u.\n",
+					DOKAN_VERSION_REQUIRED_STR_W, DOKAN_VERSION_REQUIRED, version
+				);
+				return true;
+			}
 		} else {
 			fwprintf(stderr,
 				L"**Error** Could not retrieve the required functions from %s.\n", DLL
 			);
+		}
 	} else {
 		fwprintf(stderr, L"**Error** Could not load %s.\n", DLL);
 	}
