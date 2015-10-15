@@ -34,7 +34,9 @@
 
 #include "src/fs_fat.c"
 #include "src/pt_nec.c"
+#include "src/pt_none.c"
 #include "src/c_hdi.c"
+#include "src/c_none.c"
 
 const FSFORMAT *FSFormats[] = {
 	&FS_FAT,
@@ -42,10 +44,12 @@ const FSFORMAT *FSFormats[] = {
 };
 const PTFORMAT *PTFormats[] = {
 	&PT_NEC,
+	&PT_None,
 	NULL
 };
 const CFORMAT *CFormats[] = {
 	&C_HDI,
+	&C_None,
 	NULL
 };
 
