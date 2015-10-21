@@ -45,10 +45,8 @@ bool DokanInit(void)
 		fwprintf(stderr, L"**Error** Could not load %s.\n", DLL);
 	}
 	fwprintf(stderr,
-		L"dimount requires at least Dokan %s. Please install the latest release from\n"
-		L"\n"
-		L"\thttps://github.com/dokan-dev/dokany\n",
-		DOKAN_VERSION_REQUIRED_STR_W
+		L"dimount requires at least Dokan %s. %s\n",
+		DOKAN_VERSION_REQUIRED_STR_W, DOKAN_URL_MESSAGE
 	);
 	return false;
 }
@@ -393,6 +391,31 @@ int dimount(const wchar_t *Mountpoint, const wchar_t *ImageFN)
 		.GlobalContext = (ULONG64)fs_to_mount,
 	};
 	ret = pDokanMain(&options, &operations);
+	switch(ret) {
+		case DOKAN_MOUNT_POINT_ERROR:
+		case DOKAN_DRIVE_LETTER_ERROR:
+			fwprintf(stderr, L"**Error** Invalid mount point: %s\n", Mountpoint);
+			break;
+		case DOKAN_DRIVER_INSTALL_ERROR:
+			fwprintf(stderr,
+				L"**Error** The Dokan driver was installed improperly.\n%s",
+				DOKAN_URL_MESSAGE
+			);
+			break;
+		case DOKAN_START_ERROR:
+			fwprintf(stderr,
+				L"**Error** Dokan driver version mismatch. %s",
+				DOKAN_URL_MESSAGE
+			);
+			break;
+		case DOKAN_MOUNT_ERROR:
+			fwprintf(stderr, L"**Error** Mount point already occupied: %s\n", Mountpoint);
+			break;
+		case DOKAN_ERROR:
+		default:
+			fwprintf(stderr, L"**Error** Something inside Dokan went wrong?\n");
+			break;
+	}
 
 end:
 	UnmapViewOfFile(image.View.Memory);

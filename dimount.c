@@ -12,6 +12,11 @@
 #include <stdio.h>
 #include <dokan.h>
 
+const wchar_t *DOKAN_URL_MESSAGE =
+	L"Please install the latest release from\n"
+	L"\n"
+	L"\thttps://github.com/dokan-dev/dokany\n";
+
 #define DOKAN_VERSION_REQUIRED 800
 #define DOKAN_VERSION_REQUIRED_STR "v0.8.0"
 #define DOKAN_VERSION_REQUIRED_STR_W L"v0.8.0"
