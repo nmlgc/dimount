@@ -179,7 +179,7 @@ bool FAT_ToShortName(char *dst, const wchar_t *src_w, size_t src_len, UINT codep
 	memset(dst + base_len, ' ', 8 - base_len);
 	memcpy(dst + 8, ext, ext_len);
 	memset(dst + 8 + ext_len, ' ', 3 - ext_len);
-	if(dst[0] == 0xE5) {
+	if((unsigned char)(dst[0]) == 0xE5) {
 		dst[0] = 0x05;
 	}
 	return true;
@@ -376,18 +376,22 @@ int FS_FAT_Probe(FILESYSTEM *FS)
 
 	fat_cluster_t max_clusters = fi.FATSectors * fbr->SecSize;
 	switch(fi.Type) {
+	case FAT_UNKNOWN:
+		// clang wants us to handle this, but since this can't happen anyway...
+		assert(NULL);
+		break;
 	case FAT12:
-		fi.Lookup = FAT12_ClusterLookup;
+		fi.Lookup = (FAT_Lookup_t*)FAT12_ClusterLookup;
 		max_clusters = (max_clusters * 2) / 3;
 		FS->Serial = fbr->EBPB.Serial;
 		break;
 	case FAT16:
-		fi.Lookup = FAT16_ClusterLookup;
+		fi.Lookup = (FAT_Lookup_t*)FAT16_ClusterLookup;
 		max_clusters /= 2;
 		FS->Serial = fbr->EBPB.Serial;
 		break;
 	case FAT32:
-		fi.Lookup = FAT32_ClusterLookup;
+		fi.Lookup = (FAT_Lookup_t*)FAT32_ClusterLookup;
 		max_clusters /= 4;
 		FS->Serial = fbr->FAT32.EBPB.Serial;
 		break;
@@ -477,7 +481,7 @@ FAT_DIR_ENTRY* FAT_FileLookup(FILESYSTEM *FS, const wchar_t *FileName, FAT_DIR_E
 
 	FAT_DirIterateInit(FS, &iter, DStart);
 	FAT_DIR_ENTRY *dentry;
-	while(dentry = FAT_DirIterate(FS, &iter)) {
+	while((dentry = FAT_DirIterate(FS, &iter))) {
 		if(dentry->BaseName[0] == '\0') {
 			break;
 		}
@@ -525,7 +529,7 @@ NTSTATUS FS_FAT_FindFiles(FILESYSTEM *FS, ULONG64 Dir, FIND_CALLBACK_DATA *FCD)
 	uint8_t lfn_length = 0;
 	uint8_t lfn_segment = 0;
 
-	while(dentry = FAT_DirIterate(FS, &iter)) {
+	while((dentry = FAT_DirIterate(FS, &iter))) {
 		WIN32_FIND_DATAA fd_a;
 		WIN32_FIND_DATAW fd_w;
 		FAT_LFN_ENTRY *lfn_entry = (FAT_LFN_ENTRY*)dentry;

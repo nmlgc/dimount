@@ -104,12 +104,12 @@ int ReportError(int ReturnValue, DWORD Error, const wchar_t *Prefix, ...)
 	char filename_a[MAX_PATH]; \
 	ULONG64 ret; \
 	if(unicode) { \
-		ret = fmt->Func##W(fs, FileNameW, __VA_ARGS__); \
+		ret = fmt->Func##W(fs, FileNameW, ##__VA_ARGS__); \
 	} else { \
 		WideCharToMultiByte( \
 			fs->CodePage, 0, FileNameW, -1, filename_a, sizeof(filename_a), NULL, NULL \
 		); \
-		ret = fmt->Func##A(fs, filename_a, __VA_ARGS__); \
+		ret = fmt->Func##A(fs, filename_a, ##__VA_ARGS__); \
 	}
 
 // TODO: Apparently, some functions that take the file name can be called
@@ -348,7 +348,7 @@ int dimount(const wchar_t *Mountpoint, const wchar_t *ImageFN)
 		ret = -7;
 		goto end;
 	}
-	unsigned int partitions_found = ImagePTFormatProbe(&image);
+	int partitions_found = ImagePTFormatProbe(&image);
 	if(partitions_found > 0) {
 		fwprintf(stdout, L"Partition table format: %s\n", image.PTFormat->Name);
 	} else if(partitions_found == 0) {
@@ -362,7 +362,7 @@ int dimount(const wchar_t *Mountpoint, const wchar_t *ImageFN)
 	}
 
 	FILESYSTEM *fs_to_mount = NULL;
-	unsigned int i;
+	int i;
 	for(i = 0; i < partitions_found; i++) {
 		if(!ImageFSFormatProbe(&image.Partitions[i])) {
 			fs_to_mount = &image.Partitions[i];
